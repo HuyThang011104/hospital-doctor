@@ -6,10 +6,11 @@ import { Badge } from "../ui/badge";
 import { Input } from "../ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
-import { Calendar, Search, Filter, Plus, Eye, Edit, Clock } from "lucide-react";
+import { Calendar, Search, Filter, Plus, Eye, Clock, Check, X } from "lucide-react";
 import { type Appointment } from "@/utils/mock/mock-data";
 import { supabase } from "@/utils/backend/client";
 import { useAuth } from "@/hooks/use-auth";
+import { toast } from "sonner";
 
 
 interface AppointmentsPageProps {
@@ -81,6 +82,35 @@ export default function AppointmentsPage({ onNavigate }: AppointmentsPageProps) 
     const getStatusCount = (status: string) => {
         return appointments.filter(apt => apt.status === status).length;
     };
+
+    const handleAccept = async (appointment: Appointment) => {
+        const { error } = await supabase
+            .from("appointment")
+            .update({ status: "Accepted" })
+            .eq("id", appointment.id);
+
+        if (error) {
+            console.error(error);
+            toast.error("Không thể chấp nhận cuộc hẹn!");
+        } else {
+            toast.success("Đã chấp nhận cuộc hẹn!");
+        }
+    };
+
+    const handleReject = async (appointment: Appointment) => {
+        const { error } = await supabase
+            .from("appointment")
+            .update({ status: "Rejected" })
+            .eq("id", appointment.id);
+
+        if (error) {
+            console.error(error);
+            toast.error("Không thể từ chối cuộc hẹn!");
+        } else {
+            toast.success("Đã từ chối cuộc hẹn!");
+        }
+    };
+
 
     return (
         <div className="space-y-6">
@@ -258,26 +288,39 @@ export default function AppointmentsPage({ onNavigate }: AppointmentsPageProps) 
                                         <TableCell className="max-w-xs">
                                             <p className="truncate">{appointment.notes}</p>
                                         </TableCell>
-                                        <TableCell>
-                                            <div className="flex space-x-2">
+                                        <TableCell className="w-min pr-0 whitespace-nowrap">
+                                            <div className="flex items-center gap-1">
                                                 <Button
                                                     size="sm"
                                                     variant="outline"
-                                                    onClick={() => onNavigate("appointment-detail", appointment)}
+                                                    onClick={(e) => { e.stopPropagation(); onNavigate("appointment-detail", appointment); }}
                                                     className="text-[#007BFF] border-[#007BFF] hover:bg-blue-50"
                                                 >
                                                     <Eye className="h-4 w-4 mr-1" />
                                                     View
                                                 </Button>
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() => onNavigate("appointment-detail", appointment)}
-                                                    className="text-green-600 border-green-600 hover:bg-green-50"
+
+                                                {/* Accept - chỉ icon, rất gọn */}
+                                                <span
+                                                    role="button"
+                                                    title="Accept"
+                                                    aria-label="Accept appointment"
+                                                    onClick={(e) => { e.stopPropagation(); handleAccept(appointment); }}
+                                                    className="cursor-pointer p-1 rounded hover:bg-green-50"
                                                 >
-                                                    <Edit className="h-4 w-4 mr-1" />
-                                                    Edit
-                                                </Button>
+                                                    <Check className="h-4 w-4" color="green" />
+                                                </span>
+
+                                                {/* Reject - chỉ icon, rất gọn */}
+                                                <span
+                                                    role="button"
+                                                    title="Reject"
+                                                    aria-label="Reject appointment"
+                                                    onClick={(e) => { e.stopPropagation(); handleReject(appointment); }}
+                                                    className="cursor-pointer p-1 rounded hover:bg-red-50"
+                                                >
+                                                    <X className="h-4 w-4" color="red" />
+                                                </span>
                                             </div>
                                         </TableCell>
                                     </TableRow>
