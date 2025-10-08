@@ -49,6 +49,9 @@ export interface Appointment {
   shift_id: number;
   status: string;
   notes: string;
+  patient?: Patient;
+  doctor?: Doctor;
+  shift?: Shift;
 }
 
 export interface Shift {
@@ -96,8 +99,10 @@ export interface Prescription {
 export interface Medicine {
   id: number;
   name: string;
-  type: string;
-  unit: string;
+  description: string;
+  unit_price: number;
+  quantity: number;
+  expiry_date: string;
 }
 
 export interface LabTest {
@@ -352,11 +357,46 @@ export const medicalRecords: MedicalRecord[] = [
 ];
 
 export const medicines: Medicine[] = [
-  { id: 1, name: "Lisinopril", type: "ACE Inhibitor", unit: "mg" },
-  { id: 2, name: "Metoprolol", type: "Beta Blocker", unit: "mg" },
-  { id: 3, name: "Atorvastatin", type: "Statin", unit: "mg" },
-  { id: 4, name: "Aspirin", type: "Antiplatelet", unit: "mg" },
-  { id: 5, name: "Ibuprofen", type: "NSAID", unit: "mg" },
+  {
+    id: 1,
+    name: "Lisinopril",
+    unit_price: 10,
+    quantity: 100,
+    expiry_date: "2024-12-31",
+    description: "ACE Inhibitor",
+  },
+  {
+    id: 2,
+    name: "Metoprolol",
+    unit_price: 20,
+    quantity: 50,
+    expiry_date: "2024-12-31",
+    description: "Beta Blocker",
+  },
+  {
+    id: 3,
+    name: "Atorvastatin",
+    unit_price: 30,
+    quantity: 100,
+    expiry_date: "2024-12-31",
+    description: "Statin",
+  },
+  {
+    id: 4,
+    name: "Aspirin",
+    unit_price: 40,
+    quantity: 50,
+    expiry_date: "2024-12-31",
+    description: "Antiplatelet",
+  },
+  {
+    id: 5,
+    name: "Ibuprofen",
+    unit_price: 50,
+    quantity: 100,
+    expiry_date: "2024-12-31",
+    description: "NSAID",
+  },
 ];
 
 export const prescriptions: Prescription[] = [
@@ -492,7 +532,10 @@ export const getDepartmentById = (id: number): Department | undefined => {
   return departments.find((dept) => dept.id === id);
 };
 
-export const getMedicineById = (id: number): Medicine | undefined => {
+export const getMedicineById = (
+  id: number,
+  medicines: Medicine[]
+): Medicine | undefined => {
   return medicines.find((medicine) => medicine.id === id);
 };
 
@@ -510,13 +553,17 @@ export const getScheduleByDate = (date: string): DoctorWorkSchedule[] => {
 };
 
 export const getPrescriptionsByRecordId = (
-  recordId: number
+  recordId: number,
+  prescriptions: Prescription[]
 ): Prescription[] => {
   return prescriptions.filter(
     (prescription) => prescription.medical_record_id === recordId
   );
 };
 
-export const getLabTestsByRecordId = (recordId: number): LabTest[] => {
+export const getLabTestsByRecordId = (
+  recordId: number,
+  labTests: LabTest[]
+): LabTest[] => {
   return labTests.filter((test) => test.medical_record_id === recordId);
 };
