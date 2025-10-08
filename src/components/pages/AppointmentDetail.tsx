@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -6,10 +7,11 @@ import { Textarea } from "../ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Badge } from "../ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
-import { getLabTestsByRecordId, getMedicineById, getPatientById, getPrescriptionsByRecordId, getShiftById, medicalRecords, medicines, type Appointment } from "@/utils/mock/mock-data";
+import { getLabTestsByRecordId, getMedicineById, getPatientById, getPrescriptionsByRecordId, getShiftById, type Appointment, type LabTest, type MedicalRecord, type Medicine, type Prescription } from "@/utils/mock/mock-data";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ArrowLeft, Calendar, CheckCircle, Plus, Save, Trash2, User } from "lucide-react";
+import { supabase } from "@/utils/backend/client";
 
 interface AppointmentDetailPageProps {
     appointment: Appointment;
@@ -17,8 +19,86 @@ interface AppointmentDetailPageProps {
 }
 
 export default function AppointmentDetailPage({ appointment, onBack }: AppointmentDetailPageProps) {
-    const patient = getPatientById(appointment.patient_id);
-    const shift = getShiftById(appointment.shift_id);
+    const [medicalRecords, setMedicalRecords] = useState<MedicalRecord[]>([]);
+    const [medicines, setMedicines] = useState<Medicine[]>([]);
+    const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
+    const [labTests, setLabTests] = useState<LabTest[]>([]);
+    useEffect(() => {
+        const fetchMedicalRecords = async () => {
+            try {
+                const { data, error } = await supabase.from("medical_record")
+                    .select(`*,
+                    patient(*),
+                    doctor(*)
+                `)
+                if (error) throw error;
+                console.log("Medical Records: ", data);
+                if (data) {
+                    setMedicalRecords(data);
+                }
+            } catch (error) {
+                console.error("Error fetching medical records:", error);
+            }
+        }
+        fetchMedicalRecords();
+    }, [appointment.id]);
+
+    useEffect(() => {
+        const fetchMedicine = async () => {
+            try {
+                const { data, error } = await supabase.from("medicine")
+                    .select(`
+                    *
+                `);
+                if (error) throw error;
+                console.log("Medicine: ", data);
+                if (data) {
+                    setMedicines(data);
+                }
+            } catch (error) {
+                console.error("Error fetching medicine:", error);
+            }
+        }
+        fetchMedicine();
+    }, []);
+
+    useEffect(() => {
+        const fetchPrescriptions = async () => {
+            try {
+                const { data, error } = await supabase.from("prescription")
+                    .select(`*`);
+                if (error) throw error;
+                console.log("Prescription: ", data);
+                if (data) {
+                    setPrescriptions(data);
+                }
+            } catch (error) {
+                console.error("Error fetching prescription:", error);
+            }
+        }
+        fetchPrescriptions();
+    }, []);
+
+    useEffect(() => {
+        const fetchLabTests = async () => {
+            try {
+                const { data, error } = await supabase.from("lab_test")
+                    .select(`
+                    *
+                `);
+                if (error) throw error;
+                console.log("Lab Test: ", data);
+                if (data) {
+                    setLabTests(data);
+                }
+            } catch (error) {
+                console.error("Error fetching lab tests:", error);
+            }
+        }
+        fetchLabTests();
+    }, []);
+    const patient = appointment.patient;
+    const shift = appointment.shift;
     const appointmentDate = new Date(appointment.appointment_date);
 
     // Medical record state
@@ -48,8 +128,8 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
             record.doctor_id === appointment.doctor_id
     );
 
-    const recordPrescriptions = existingRecord ? getPrescriptionsByRecordId(existingRecord.id) : [];
-    const recordLabTests = existingRecord ? getLabTestsByRecordId(existingRecord.id) : [];
+    const recordPrescriptions = existingRecord ? getPrescriptionsByRecordId(existingRecord.id, prescriptions) : [];
+    const recordLabTests = existingRecord ? getLabTestsByRecordId(existingRecord.id, labTests) : [];
 
     useEffect(() => {
         if (existingRecord) {
@@ -399,7 +479,7 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
                                             <SelectContent>
                                                 {medicines.map((medicine) => (
                                                     <SelectItem key={medicine.id} value={medicine.id.toString()}>
-                                                        {medicine.name} ({medicine.type})
+                                                        {medicine.name}
                                                     </SelectItem>
                                                 ))}
                                             </SelectContent>
@@ -461,11 +541,11 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
                         </TableHeader>
                         <TableBody>
                             {recordPrescriptions.map((prescription) => {
-                                const medicine = getMedicineById(prescription.medicine_id);
+                                const medicine = getMedicineById(prescription.medicine_id, medicines);
                                 return (
                                     <TableRow key={prescription.id}>
                                         <TableCell className="font-medium">
-                                            {medicine?.name} ({medicine?.type})
+                                            {medicine?.name}
                                         </TableCell>
                                         <TableCell>{prescription.dosage}</TableCell>
                                         <TableCell>{prescription.frequency}</TableCell>

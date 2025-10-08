@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { currentDoctor } from "@/utils/mock/mock-data";
+import { useAuth } from "@/hooks/use-auth";
 import {
     LayoutDashboard,
     Calendar,
@@ -33,6 +33,7 @@ const navigation = [
 ];
 
 export default function Layout({ children, currentPage, onNavigate, onLogout }: LayoutProps) {
+    const { user } = useAuth();
     return (
         <div className="min-h-screen bg-gray-50">
             {/* Sidebar */}
@@ -62,8 +63,8 @@ export default function Layout({ children, currentPage, onNavigate, onLogout }: 
                                     key={item.id}
                                     onClick={() => onNavigate(item.id)}
                                     className={`w-full flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${isActive
-                                            ? "bg-[#007BFF] text-white"
-                                            : "text-gray-700 hover:bg-gray-100"
+                                        ? "bg-[#007BFF] text-white"
+                                        : "text-gray-700 hover:bg-gray-100"
                                         }`}
                                 >
                                     <Icon className="h-5 w-5 mr-3" />
@@ -116,8 +117,8 @@ export default function Layout({ children, currentPage, onNavigate, onLogout }: 
                         {/* User Info */}
                         <div className="flex items-center space-x-3">
                             <div className="text-right">
-                                <p className="text-sm text-gray-900">{currentDoctor.full_name}</p>
-                                <p className="text-xs text-gray-500">{currentDoctor.role}</p>
+                                <p className="text-sm text-gray-900">{user?.full_name}</p>
+                                <p className="text-xs text-gray-500">{user?.role}</p>
                             </div>
                             <div className="p-2 bg-gray-100 rounded-full">
                                 <User className="h-5 w-5 text-gray-600" />

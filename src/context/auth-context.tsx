@@ -1,15 +1,15 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable react-refresh/only-export-components */
 import { supabase } from '@/utils/backend/client';
-import type { Patient } from '@/utils/mock/mock-data';
+import type { Doctor } from '@/utils/mock/mock-data';
 import { createContext, useState, useEffect, type ReactNode } from 'react';
 
 interface AuthContextType {
-    user: Patient | null;
+    user: Doctor | null;
     isAuthenticated: boolean;
     login: (email: string, password: string) => Promise<boolean>;
     logout: () => void;
-    updateProfile: (userData: Partial<Omit<Patient, 'id' | 'email'>>) => Promise<boolean>;
+    updateProfile: (userData: Partial<Omit<Doctor, 'id' | 'email'>>) => Promise<boolean>;
 }
 
 // Khởi tạo Context
@@ -20,7 +20,7 @@ export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 const USER_STORAGE_KEY = 'patient_user_id';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-    const [user, setUser] = useState<Patient | null>(null);
+    const [user, setUser] = useState<Doctor | null>(null);
     const [loading, setLoading] = useState(true);
 
     // --- Khởi tạo: Tải người dùng từ Local Storage ---
@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 if (data && !error) {
                     // Loại bỏ trường password trước khi lưu vào state
                     const { password, ...patientData } = data;
-                    setUser(patientData as Patient);
+                    setUser(patientData as Doctor);
                 } else {
                     console.error('Error loading stored user:', error);
                     localStorage.removeItem(USER_STORAGE_KEY); // Xóa ID lỗi
@@ -67,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (data) {
-            const patientData = data as Patient;
+            const patientData = data as Doctor;
 
             localStorage.setItem(USER_STORAGE_KEY, patientData.id.toString());
             setUser(patientData);
@@ -84,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     // --- Hàm Cập nhật Hồ sơ ---
-    const updateProfile = async (userData: Partial<Omit<Patient, 'id' | 'email'>>): Promise<boolean> => {
+    const updateProfile = async (userData: Partial<Omit<Doctor, 'id' | 'email'>>): Promise<boolean> => {
         if (!user) return false;
 
         const { error: updateError } = await supabase

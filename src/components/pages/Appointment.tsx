@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
@@ -7,7 +7,9 @@ import { Input } from "../ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Calendar, Search, Filter, Plus, Eye, Edit, Clock } from "lucide-react";
-import { appointments, getPatientById, getShiftById } from "@/utils/mock/mock-data";
+import { type Appointment } from "@/utils/mock/mock-data";
+import { supabase } from "@/utils/backend/client";
+import { useAuth } from "@/hooks/use-auth";
 
 
 interface AppointmentsPageProps {
@@ -18,6 +20,30 @@ export default function AppointmentsPage({ onNavigate }: AppointmentsPageProps) 
     const [searchTerm, setSearchTerm] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
     const [dateFilter, setDateFilter] = useState("all");
+    const [appointments, setAppointments] = useState<Appointment[]>([]);
+    const { user } = useAuth();
+    useEffect(() => {
+        fetchAppointments();
+    }, []);
+
+    const fetchAppointments = async () => {
+        try {
+            const { data, error } = await supabase.from("appointment")
+                .select(`*,
+                    patient(*),
+                    doctor(*),
+                    shift(*)
+                `)
+                .eq("doctor_id", user?.id);
+            if (error) throw error;
+            console.log("Appointments: ", data);
+            if (data) {
+                setAppointments(data);
+            }
+        } catch (error) {
+            console.error("Error fetching appointments:", error);
+        }
+    }
 
     const getStatusBadge = (status: string) => {
         const statusColors = {
@@ -30,8 +56,7 @@ export default function AppointmentsPage({ onNavigate }: AppointmentsPageProps) 
     };
 
     const filteredAppointments = appointments.filter(appointment => {
-        const patient = getPatientById(appointment.patient_id);
-        const matchesSearch = patient?.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        const matchesSearch = appointment.patient?.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             appointment.notes.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesStatus = statusFilter === "all" || appointment.status === statusFilter;
 
@@ -197,16 +222,14 @@ export default function AppointmentsPage({ onNavigate }: AppointmentsPageProps) 
                         </TableHeader>
                         <TableBody>
                             {filteredAppointments.map((appointment) => {
-                                const patient = getPatientById(appointment.patient_id);
-                                const shift = getShiftById(appointment.shift_id);
                                 const appointmentDate = new Date(appointment.appointment_date);
 
                                 return (
                                     <TableRow key={appointment.id}>
                                         <TableCell>
                                             <div>
-                                                <p className="font-medium">{patient?.full_name || "Unknown Patient"}</p>
-                                                <p className="text-sm text-gray-500">{patient?.phone}</p>
+                                                <p className="font-medium">{appointment.patient?.full_name || "Unknown Patient"}</p>
+                                                <p className="text-sm text-gray-500">{appointment.patient?.phone}</p>
                                             </div>
                                         </TableCell>
                                         <TableCell>
@@ -224,7 +247,7 @@ export default function AppointmentsPage({ onNavigate }: AppointmentsPageProps) 
                                         </TableCell>
                                         <TableCell>
                                             <Badge variant="outline">
-                                                {shift?.name || "Unknown Shift"}
+                                                {appointment.shift?.name || "Unknown Shift"}
                                             </Badge>
                                         </TableCell>
                                         <TableCell>

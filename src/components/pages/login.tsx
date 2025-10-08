@@ -79,7 +79,7 @@ export default function LoginPage() {
                     </form>
                     <div className="mt-4 text-center">
                         <p className="text-sm text-gray-600">
-                            Demo credentials: <span className="font-mono bg-gray-100 px-1 rounded">hminh@hospital.com</span> / <span className="font-mono bg-gray-100 px-1 rounded">docpass1</span>
+                            Demo credentials: <span className="font-mono bg-gray-100 px-1 rounded">ngminh@hospital.vn</span> / <span className="font-mono bg-gray-100 px-1 rounded">123456</span>
                         </p>
                     </div>
                 </CardContent>
