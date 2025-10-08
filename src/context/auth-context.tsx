@@ -1,21 +1,15 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable react-refresh/only-export-components */
-import type { Patient } from '@/interfaces';
 import { supabase } from '@/utils/backend/client';
+import type { Patient } from '@/utils/mock/mock-data';
 import { createContext, useState, useEffect, type ReactNode } from 'react';
 
 interface AuthContextType {
     user: Patient | null;
     isAuthenticated: boolean;
     login: (email: string, password: string) => Promise<boolean>;
-    register: (userData: RegisterData) => Promise<boolean>;
     logout: () => void;
     updateProfile: (userData: Partial<Omit<Patient, 'id' | 'email'>>) => Promise<boolean>;
-}
-
-// Kiểu dữ liệu cho đăng ký (bao gồm password)
-interface RegisterData extends Omit<Patient, 'id'> {
-    password: string; // Cần thiết cho đăng ký
 }
 
 // Khởi tạo Context
@@ -36,7 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (userId) {
                 // Truy vấn bảng patients bằng ID đã lưu
                 const { data, error } = await supabase
-                    .from('patient')
+                    .from('doctor')
                     .select('*')
                     .eq('id', userId)
                     .limit(1)
@@ -60,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // --- Hàm Đăng nhập ---
     const login = async (email: string, password: string): Promise<boolean> => {
         const { data, error } = await supabase
-            .from('patient')
+            .from('doctor')
             .select('*')
             .eq('email', email)
             .eq('password', password)
@@ -75,53 +69,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (data) {
             const patientData = data as Patient;
 
-            localStorage.setItem(USER_STORAGE_KEY, patientData.id);
+            localStorage.setItem(USER_STORAGE_KEY, patientData.id.toString());
             setUser(patientData);
             return true;
         }
 
         return false; // Không khớp email/password
-    };
-
-    // --- Hàm Đăng ký ---
-    const register = async (userData: RegisterData): Promise<boolean> => {
-        const { password, ...patientData } = userData;
-
-        // 1. Kiểm tra email đã tồn tại chưa
-        const { data: existingUser } = await supabase
-            .from('patients')
-            .select('id')
-            .eq('email', patientData.email)
-            .limit(1);
-
-        if (existingUser && existingUser.length > 0) {
-            console.error('Registration error: Email already exists.');
-            return false;
-        }
-
-        // 2. Chèn người dùng mới vào bảng 'patients'
-        const newUser: Patient & { password: string; id: string } = {
-            ...patientData,
-            id: crypto.randomUUID(), // Tạo ID duy nhất mới
-            password: password, // LƯU Ý BẢO MẬT: Mật khẩu chưa được băm!
-        };
-
-        const { error: insertError } = await supabase
-            .from('patients')
-            .insert(newUser);
-
-        if (insertError) {
-            console.error('Error registering patient:', insertError.message);
-            return false;
-        }
-
-        // 3. Đăng nhập người dùng sau khi đăng ký thành công
-        localStorage.setItem(USER_STORAGE_KEY, newUser.id);
-
-        // Loại bỏ password trước khi lưu vào state
-        const { password: _, ...userWithoutPassword } = newUser;
-        setUser(userWithoutPassword);
-        return true;
     };
 
     // --- Hàm Đăng xuất ---
@@ -135,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!user) return false;
 
         const { error: updateError } = await supabase
-            .from('patients')
+            .from('doctor')
             .update(userData)
             .eq('id', user.id); // Cập nhật dựa trên ID người dùng hiện tại
 
@@ -151,7 +104,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 
     if (loading) {
-        // Hiển thị màn hình tải trong khi kiểm tra Local Storage
         return <div>Loading authentication...</div>;
     }
 
@@ -160,7 +112,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             user,
             isAuthenticated: !!user,
             login,
-            register,
             logout,
             updateProfile
         }}>

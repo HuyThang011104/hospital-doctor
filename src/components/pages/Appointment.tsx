@@ -1,0 +1,269 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useState } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
+import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
+import { Input } from "../ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { Calendar, Search, Filter, Plus, Eye, Edit, Clock } from "lucide-react";
+import { appointments, getPatientById, getShiftById } from "@/utils/mock/mock-data";
+
+
+interface AppointmentsPageProps {
+    onNavigate: (page: string, data?: any) => void;
+}
+
+export default function AppointmentsPage({ onNavigate }: AppointmentsPageProps) {
+    const [searchTerm, setSearchTerm] = useState("");
+    const [statusFilter, setStatusFilter] = useState("all");
+    const [dateFilter, setDateFilter] = useState("all");
+
+    const getStatusBadge = (status: string) => {
+        const statusColors = {
+            "Scheduled": "bg-blue-100 text-blue-800",
+            "Completed": "bg-green-100 text-green-800",
+            "Cancelled": "bg-red-100 text-red-800",
+            "In Progress": "bg-yellow-100 text-yellow-800"
+        };
+        return statusColors[status as keyof typeof statusColors] || "bg-gray-100 text-gray-800";
+    };
+
+    const filteredAppointments = appointments.filter(appointment => {
+        const patient = getPatientById(appointment.patient_id);
+        const matchesSearch = patient?.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            appointment.notes.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesStatus = statusFilter === "all" || appointment.status === statusFilter;
+
+        let matchesDate = true;
+        if (dateFilter === "today") {
+            const today = new Date().toISOString().split('T')[0];
+            matchesDate = appointment.appointment_date.startsWith(today);
+        } else if (dateFilter === "upcoming") {
+            const today = new Date();
+            const appointmentDate = new Date(appointment.appointment_date);
+            matchesDate = appointmentDate >= today;
+        }
+
+        return matchesSearch && matchesStatus && matchesDate;
+    });
+
+    const getUpcomingCount = () => {
+        const today = new Date();
+        return appointments.filter(apt => new Date(apt.appointment_date) >= today).length;
+    };
+
+    const getStatusCount = (status: string) => {
+        return appointments.filter(apt => apt.status === status).length;
+    };
+
+    return (
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900">Appointments</h1>
+                    <p className="text-gray-600 mt-1">Manage all patient appointments</p>
+                </div>
+                <Button className="bg-[#007BFF] hover:bg-blue-600">
+                    <Plus className="h-4 w-4 mr-2" />
+                    New Appointment
+                </Button>
+            </div>
+
+            {/* Statistics Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Card className="border-0 shadow-md">
+                    <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm text-gray-600">Total</p>
+                                <p className="text-2xl font-bold text-gray-900">{appointments.length}</p>
+                            </div>
+                            <div className="p-3 bg-blue-100 rounded-lg">
+                                <Calendar className="h-5 w-5 text-blue-600" />
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="border-0 shadow-md">
+                    <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm text-gray-600">Upcoming</p>
+                                <p className="text-2xl font-bold text-gray-900">{getUpcomingCount()}</p>
+                            </div>
+                            <div className="p-3 bg-green-100 rounded-lg">
+                                <Clock className="h-5 w-5 text-green-600" />
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="border-0 shadow-md">
+                    <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm text-gray-600">Completed</p>
+                                <p className="text-2xl font-bold text-gray-900">{getStatusCount("Completed")}</p>
+                            </div>
+                            <div className="p-3 bg-purple-100 rounded-lg">
+                                <Calendar className="h-5 w-5 text-purple-600" />
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="border-0 shadow-md">
+                    <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm text-gray-600">Scheduled</p>
+                                <p className="text-2xl font-bold text-gray-900">{getStatusCount("Scheduled")}</p>
+                            </div>
+                            <div className="p-3 bg-orange-100 rounded-lg">
+                                <Calendar className="h-5 w-5 text-orange-600" />
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Filters */}
+            <Card className="border-0 shadow-md">
+                <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                        <Filter className="h-5 w-5 text-[#007BFF]" />
+                        <span>Filter Appointments</span>
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <Input
+                                placeholder="Search by patient name or notes..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="pl-10"
+                            />
+                        </div>
+                        <Select value={statusFilter} onValueChange={setStatusFilter}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Filter by status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Statuses</SelectItem>
+                                <SelectItem value="Scheduled">Scheduled</SelectItem>
+                                <SelectItem value="Completed">Completed</SelectItem>
+                                <SelectItem value="Cancelled">Cancelled</SelectItem>
+                                <SelectItem value="In Progress">In Progress</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Select value={dateFilter} onValueChange={setDateFilter}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Filter by date" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Dates</SelectItem>
+                                <SelectItem value="today">Today</SelectItem>
+                                <SelectItem value="upcoming">Upcoming</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Appointments Table */}
+            <Card className="border-0 shadow-md">
+                <CardHeader>
+                    <CardTitle>All Appointments</CardTitle>
+                    <CardDescription>
+                        {filteredAppointments.length} appointment{filteredAppointments.length !== 1 ? 's' : ''} found
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Patient</TableHead>
+                                <TableHead>Date & Time</TableHead>
+                                <TableHead>Shift</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Notes</TableHead>
+                                <TableHead>Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {filteredAppointments.map((appointment) => {
+                                const patient = getPatientById(appointment.patient_id);
+                                const shift = getShiftById(appointment.shift_id);
+                                const appointmentDate = new Date(appointment.appointment_date);
+
+                                return (
+                                    <TableRow key={appointment.id}>
+                                        <TableCell>
+                                            <div>
+                                                <p className="font-medium">{patient?.full_name || "Unknown Patient"}</p>
+                                                <p className="text-sm text-gray-500">{patient?.phone}</p>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div>
+                                                <p className="font-medium">
+                                                    {appointmentDate.toLocaleDateString()}
+                                                </p>
+                                                <p className="text-sm text-gray-500">
+                                                    {appointmentDate.toLocaleTimeString('en-US', {
+                                                        hour: '2-digit',
+                                                        minute: '2-digit'
+                                                    })}
+                                                </p>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline">
+                                                {shift?.name || "Unknown Shift"}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge className={getStatusBadge(appointment.status)}>
+                                                {appointment.status}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="max-w-xs">
+                                            <p className="truncate">{appointment.notes}</p>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex space-x-2">
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => onNavigate("appointment-detail", appointment)}
+                                                    className="text-[#007BFF] border-[#007BFF] hover:bg-blue-50"
+                                                >
+                                                    <Eye className="h-4 w-4 mr-1" />
+                                                    View
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => onNavigate("appointment-detail", appointment)}
+                                                    className="text-green-600 border-green-600 hover:bg-green-50"
+                                                >
+                                                    <Edit className="h-4 w-4 mr-1" />
+                                                    Edit
+                                                </Button>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
+        </div>
+    );
+}

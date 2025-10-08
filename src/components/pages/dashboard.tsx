@@ -1,247 +1,281 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
-import { Button } from '../ui/button';
-import { Calendar, Clock, Shield, DollarSign, CalendarPlus, FileText } from 'lucide-react';
-import { useAuth } from '@/hooks/use-auth';
-import { mockAppointments, mockPayments } from '@/utils/mock/mock-data';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
+import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { Calendar, Users, TestTube, CalendarDays, Eye, Edit, FileText } from "lucide-react";
+import { appointments, getPatientById, getShiftById, getTodaysAppointments, labTests, leaveRequests } from "@/utils/mock/mock-data";
 
-interface DashboardProps {
-    onPageChange: (page: string) => void;
+interface DashboardPageProps {
+    onNavigate: (page: string, data?: any) => void;
 }
 
-export function Dashboard({ onPageChange }: DashboardProps) {
-    const { user } = useAuth();
+export default function DashboardPage({ onNavigate }: DashboardPageProps) {
+    const todaysAppointments = getTodaysAppointments();
+    const pendingLabTests = labTests.filter(test => test.result === "Pending");
+    const pendingLeaveRequests = leaveRequests.filter(req => req.status === "Pending");
 
-    const upcomingAppointments = mockAppointments.filter(
-        apt => apt.status === 'Pending' && new Date(apt.date) >= new Date()
-    );
+    const stats = [
+        {
+            title: "Total Appointments",
+            value: appointments.length,
+            description: "All appointments",
+            icon: Calendar,
+            color: "text-blue-600",
+            bgColor: "bg-blue-100"
+        },
+        {
+            title: "Today's Patients",
+            value: todaysAppointments.length,
+            description: "Scheduled for today",
+            icon: Users,
+            color: "text-green-600",
+            bgColor: "bg-green-100"
+        },
+        {
+            title: "Pending Lab Tests",
+            value: pendingLabTests.length,
+            description: "Awaiting results",
+            icon: TestTube,
+            color: "text-orange-600",
+            bgColor: "bg-orange-100"
+        },
+        {
+            title: "Leave Requests",
+            value: pendingLeaveRequests.length,
+            description: "Pending approval",
+            icon: CalendarDays,
+            color: "text-purple-600",
+            bgColor: "bg-purple-100"
+        }
+    ];
 
-    const totalVisits = mockAppointments.filter(apt => apt.status === 'Completed').length;
-    const totalPayments = mockPayments.reduce((sum, payment) => sum + payment.amount, 0);
-    const pendingPayments = mockPayments.filter(payment => payment.status === 'Pending').length;
-
-    const nextAppointment = upcomingAppointments.sort((a, b) =>
-        new Date(a.date).getTime() - new Date(b.date).getTime()
-    )[0];
-
-    const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleDateString('en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        });
+    const getStatusBadge = (status: string) => {
+        const statusColors = {
+            "Scheduled": "bg-blue-100 text-blue-800",
+            "Completed": "bg-green-100 text-green-800",
+            "Cancelled": "bg-red-100 text-red-800",
+            "In Progress": "bg-yellow-100 text-yellow-800"
+        };
+        return statusColors[status as keyof typeof statusColors] || "bg-gray-100 text-gray-800";
     };
 
     return (
-        <div className="p-6 space-y-6">
-            <div>
-                <h1>Welcome back, {user?.full_name?.split(' ')[0] || 'John'}!</h1>
-                <p className="text-muted-foreground">Here's an overview of your healthcare journey</p>
-            </div>
-
-            {/* Overview Cards */}
+        <div className="space-y-6">
+            {/* Statistics Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Upcoming Appointments</CardTitle>
-                        <Calendar className="h-4 w-4 text-blue-600" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{upcomingAppointments.length}</div>
-                        <p className="text-xs text-muted-foreground">
-                            {upcomingAppointments.length > 0 ? 'Next appointment scheduled' : 'No upcoming appointments'}
-                        </p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Visits</CardTitle>
-                        <FileText className="h-4 w-4 text-green-600" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{totalVisits}</div>
-                        <p className="text-xs text-muted-foreground">
-                            Completed appointments this year
-                        </p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Active Insurance</CardTitle>
-                        <Shield className="h-4 w-4 text-purple-600" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">
-                            {user?.insurance_provider ? 'Active' : 'None'}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                            {user?.insurance_provider || 'No insurance on file'}
-                        </p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Payments</CardTitle>
-                        <DollarSign className="h-4 w-4 text-orange-600" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">${totalPayments.toFixed(2)}</div>
-                        <p className="text-xs text-muted-foreground">
-                            {pendingPayments > 0 ? `${pendingPayments} pending bill(s)` : 'All bills paid'}
-                        </p>
-                    </CardContent>
-                </Card>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Next Appointment */}
-                <Card className="lg:col-span-2">
-                    <CardHeader>
-                        <CardTitle>Next Appointment</CardTitle>
-                        <CardDescription>Your upcoming medical appointments</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {nextAppointment ? (
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
-                                            <Calendar className="h-6 w-6 text-white" />
-                                        </div>
-                                        <div>
-                                            <h3 className="font-medium">{nextAppointment.doctor_name}</h3>
-                                            <p className="text-sm text-muted-foreground">{nextAppointment.department_name}</p>
-                                            <div className="flex items-center gap-2 mt-1">
-                                                <Clock className="h-3 w-3 text-muted-foreground" />
-                                                <span className="text-xs text-muted-foreground">
-                                                    {formatDate(nextAppointment.date)} - {nextAppointment.shift}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => onPageChange('my-appointments')}
-                                    >
-                                        View Details
-                                    </Button>
+                {stats.map((stat, index) => {
+                    const Icon = stat.icon;
+                    return (
+                        <Card key={index} className="border-0 shadow-md">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium text-gray-600">
+                                    {stat.title}
+                                </CardTitle>
+                                <div className={`p-2 rounded-lg ${stat.bgColor}`}>
+                                    <Icon className={`h-4 w-4 ${stat.color}`} />
                                 </div>
-                                <Button
-                                    className="w-full bg-blue-600 hover:bg-blue-700"
-                                    onClick={() => onPageChange('book-appointment')}
-                                >
-                                    <CalendarPlus className="h-4 w-4 mr-2" />
-                                    Book Another Appointment
-                                </Button>
-                            </div>
-                        ) : (
-                            <div className="text-center py-8">
-                                <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                                <h3 className="font-medium mb-2">No upcoming appointments</h3>
-                                <p className="text-sm text-muted-foreground mb-4">
-                                    Schedule your next appointment to stay on top of your health
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold text-gray-900">{stat.value}</div>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    {stat.description}
                                 </p>
-                                <Button
-                                    className="bg-blue-600 hover:bg-blue-700"
-                                    onClick={() => onPageChange('book-appointment')}
-                                >
-                                    <CalendarPlus className="h-4 w-4 mr-2" />
-                                    Book Appointment
-                                </Button>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-
-                {/* Quick Actions */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Quick Actions</CardTitle>
-                        <CardDescription>Common tasks and shortcuts</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                        <Button
-                            variant="outline"
-                            className="w-full justify-start"
-                            onClick={() => onPageChange('medical-records')}
-                        >
-                            <FileText className="h-4 w-4 mr-2" />
-                            View Medical Records
-                        </Button>
-                        <Button
-                            variant="outline"
-                            className="w-full justify-start"
-                            onClick={() => onPageChange('prescriptions')}
-                        >
-                            <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                            </svg>
-                            View Prescriptions
-                        </Button>
-                        <Button
-                            variant="outline"
-                            className="w-full justify-start"
-                            onClick={() => onPageChange('payments')}
-                        >
-                            <DollarSign className="h-4 w-4 mr-2" />
-                            Manage Payments
-                        </Button>
-                        <Button
-                            variant="outline"
-                            className="w-full justify-start"
-                            onClick={() => onPageChange('profile')}
-                        >
-                            <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                            </svg>
-                            Update Profile
-                        </Button>
-                    </CardContent>
-                </Card>
+                            </CardContent>
+                        </Card>
+                    );
+                })}
             </div>
 
-            {/* Recent Activity */}
-            <Card>
+            {/* Today's Appointments */}
+            <Card className="border-0 shadow-md">
                 <CardHeader>
-                    <CardTitle>Recent Activity</CardTitle>
-                    <CardDescription>Your latest appointments and medical records</CardDescription>
+                    <CardTitle className="flex items-center space-x-2">
+                        <Calendar className="h-5 w-5 text-[#007BFF]" />
+                        <span>Today's Appointments</span>
+                    </CardTitle>
+                    <CardDescription>
+                        Appointments scheduled for {new Date().toLocaleDateString('en-US', {
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                        })}
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="space-y-4">
-                        {mockAppointments
-                            .filter(apt => apt.status === 'Completed')
-                            .slice(0, 3)
-                            .map((appointment) => (
-                                <div key={appointment.id} className="flex items-center justify-between p-3 border rounded-lg">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                                            <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                            </svg>
-                                        </div>
-                                        <div>
-                                            <p className="font-medium">{appointment.doctor_name}</p>
-                                            <p className="text-sm text-muted-foreground">
-                                                {appointment.department_name} • {formatDate(appointment.date)}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => onPageChange('medical-records')}
-                                    >
-                                        View Record
-                                    </Button>
-                                </div>
-                            ))}
-                    </div>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Patient Name</TableHead>
+                                <TableHead>Time</TableHead>
+                                <TableHead>Shift</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Notes</TableHead>
+                                <TableHead>Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {appointments.map((appointment) => {
+                                const patient = getPatientById(appointment.patient_id);
+                                const shift = getShiftById(appointment.shift_id);
+                                const appointmentTime = new Date(appointment.appointment_date);
+
+                                return (
+                                    <TableRow key={appointment.id}>
+                                        <TableCell className="font-medium">
+                                            {patient?.full_name || "Unknown Patient"}
+                                        </TableCell>
+                                        <TableCell>
+                                            {appointmentTime.toLocaleTimeString('en-US', {
+                                                hour: '2-digit',
+                                                minute: '2-digit'
+                                            })}
+                                        </TableCell>
+                                        <TableCell>
+                                            {shift?.name || "Unknown Shift"}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge className={getStatusBadge(appointment.status)}>
+                                                {appointment.status}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="max-w-xs truncate">
+                                            {appointment.notes}
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex space-x-2">
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => onNavigate("appointment-detail", appointment)}
+                                                    className="text-[#007BFF] border-[#007BFF] hover:bg-blue-50"
+                                                >
+                                                    <Eye className="h-4 w-4 mr-1" />
+                                                    View
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => onNavigate("appointment-detail", appointment)}
+                                                    className="text-green-600 border-green-600 hover:bg-green-50"
+                                                >
+                                                    <Edit className="h-4 w-4 mr-1" />
+                                                    Edit
+                                                </Button>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
+                        </TableBody>
+                    </Table>
                 </CardContent>
             </Card>
+
+            {/* Quick Actions */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className="border-0 shadow-md">
+                    <CardHeader>
+                        <CardTitle className="text-lg">Recent Activity</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-3">
+                            <div className="flex items-center space-x-3">
+                                <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                                    <Users className="h-4 w-4 text-green-600" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-medium">Completed appointment</p>
+                                    <p className="text-xs text-gray-500">with John Smith</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center space-x-3">
+                                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                    <TestTube className="h-4 w-4 text-blue-600" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-medium">Lab results received</p>
+                                    <p className="text-xs text-gray-500">for Emily Davis</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center space-x-3">
+                                <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                                    <CalendarDays className="h-4 w-4 text-purple-600" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-medium">Leave request approved</p>
+                                    <p className="text-xs text-gray-500">Dec 25-31, 2024</p>
+                                </div>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="border-0 shadow-md">
+                    <CardHeader>
+                        <CardTitle className="text-lg">Upcoming Tasks</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-medium">Review lab results</p>
+                                    <p className="text-xs text-gray-500">Due today</p>
+                                </div>
+                                <Badge className="bg-red-100 text-red-800">Urgent</Badge>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-medium">Complete patient records</p>
+                                    <p className="text-xs text-gray-500">Due tomorrow</p>
+                                </div>
+                                <Badge className="bg-yellow-100 text-yellow-800">Medium</Badge>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-medium">Certificate renewal</p>
+                                    <p className="text-xs text-gray-500">Due next week</p>
+                                </div>
+                                <Badge className="bg-blue-100 text-blue-800">Low</Badge>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="border-0 shadow-md">
+                    <CardHeader>
+                        <CardTitle className="text-lg">Quick Actions</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-3">
+                            <Button
+                                className="w-full justify-start bg-[#007BFF] hover:bg-blue-600"
+                                onClick={() => onNavigate("schedule")}
+                            >
+                                <Calendar className="h-4 w-4 mr-2" />
+                                View Schedule
+                            </Button>
+                            <Button
+                                className="w-full justify-start"
+                                variant="outline"
+                                onClick={() => onNavigate("records")}
+                            >
+                                <FileText className="h-4 w-4 mr-2" />
+                                Medical Records
+                            </Button>
+                            <Button
+                                className="w-full justify-start"
+                                variant="outline"
+                                onClick={() => onNavigate("leave")}
+                            >
+                                <CalendarDays className="h-4 w-4 mr-2" />
+                                Request Leave
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
         </div>
     );
 }
