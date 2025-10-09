@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
@@ -10,9 +10,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
 import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
-import { Pill, Search, Plus, Eye, Edit, AlertTriangle, Calendar, User } from "lucide-react";
-import { getMedicineById, getPatientById, medicalRecords, medicines, patients, prescriptions } from "@/utils/mock/mock-data";
+import { Pill, Search, Plus, Calendar, User } from "lucide-react";
+import {
+    fetchEnrichedPrescriptions,
+    createPrescription,
+    fetchMedicines,
+    fetchPatients,
+    type EnrichedPrescription,
+    type Medicine,
+    type Patient
+} from "@/utils/backend/prescription-service";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/use-auth";
 
 
 interface PrescriptionsPageProps {
@@ -20,9 +29,12 @@ interface PrescriptionsPageProps {
 }
 
 export default function PrescriptionsPage({ onNavigate }: PrescriptionsPageProps) {
+    const { user } = useAuth();
     const [searchTerm, setSearchTerm] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
     const [isNewPrescriptionOpen, setIsNewPrescriptionOpen] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [newPrescription, setNewPrescription] = useState({
         patient_id: "",
         medicine_id: "",
@@ -32,21 +44,52 @@ export default function PrescriptionsPage({ onNavigate }: PrescriptionsPageProps
         instructions: ""
     });
 
-    // Get prescriptions with patient and medicine details
-    const enrichedPrescriptions = prescriptions.map(prescription => {
-        const medicalRecord = medicalRecords.find(record => record.id === prescription.medical_record_id);
-        const patient = medicalRecord ? getPatientById(medicalRecord.patient_id) : null;
-        const medicine = getMedicineById(prescription.medicine_id);
+    const [prescriptionsData, setPrescriptionsData] = useState<EnrichedPrescription[]>([]);
+    const [medicines, setMedicines] = useState<Medicine[]>([]);
+    const [patients, setPatients] = useState<Patient[]>([]);
 
-        return {
-            ...prescription,
-            patient,
-            medicine,
-            medicalRecord
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                setLoading(true);
+                setError(null);
+
+                if (!user?.id) {
+                    // Fetch all prescriptions if no user is logged in (for admin view)
+                    const { fetchAllEnrichedPrescriptions } = await import("@/utils/backend/prescription-service");
+                    const [prescriptionsData, medicinesData, patientsData] = await Promise.all([
+                        fetchAllEnrichedPrescriptions(),
+                        fetchMedicines(),
+                        fetchPatients()
+                    ]);
+
+                    setPrescriptionsData(prescriptionsData);
+                    setMedicines(medicinesData);
+                    setPatients(patientsData);
+                } else {
+                    // Fetch prescriptions for current doctor
+                    const [prescriptionsData, medicinesData, patientsData] = await Promise.all([
+                        fetchEnrichedPrescriptions(user.id),
+                        fetchMedicines(),
+                        fetchPatients()
+                    ]);
+
+                    setPrescriptionsData(prescriptionsData);
+                    setMedicines(medicinesData);
+                    setPatients(patientsData);
+                }
+            } catch (err) {
+                console.error('Error fetching prescription data:', err);
+                setError(err instanceof Error ? err.message : 'Failed to load prescription data');
+            } finally {
+                setLoading(false);
+            }
         };
-    });
 
-    const filteredPrescriptions = enrichedPrescriptions.filter(prescription => {
+        fetchData();
+    }, [user?.id]);
+
+    const filteredPrescriptions = prescriptionsData.filter(prescription => {
         const matchesSearch =
             prescription.patient?.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             prescription.medicine?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -58,22 +101,48 @@ export default function PrescriptionsPage({ onNavigate }: PrescriptionsPageProps
         return matchesSearch && matchesStatus;
     });
 
-    const handleCreatePrescription = () => {
+    const handleCreatePrescription = async () => {
         if (!newPrescription.patient_id || !newPrescription.medicine_id || !newPrescription.dosage) {
             toast.error("Please fill in all required fields");
             return;
         }
 
-        toast.success("Prescription created successfully");
-        setIsNewPrescriptionOpen(false);
-        setNewPrescription({
-            patient_id: "",
-            medicine_id: "",
-            dosage: "",
-            frequency: "",
-            duration: "",
-            instructions: ""
-        });
+        try {
+            // For now, we'll need to create a mock medical record or find an existing one
+            // In a real system, you'd select from existing medical records
+            const mockMedicalRecordId = 1; // This should come from selecting a medical record
+
+            await createPrescription({
+                medical_record_id: mockMedicalRecordId,
+                medicine_id: parseInt(newPrescription.medicine_id),
+                dosage: newPrescription.dosage,
+                frequency: newPrescription.frequency,
+                duration: newPrescription.duration,
+            });
+
+            toast.success("Prescription created successfully");
+            setIsNewPrescriptionOpen(false);
+            setNewPrescription({
+                patient_id: "",
+                medicine_id: "",
+                dosage: "",
+                frequency: "",
+                duration: "",
+                instructions: ""
+            });
+
+            // Refetch data to update the list
+            if (user?.id) {
+                const [updatedPrescriptions] = await Promise.all([
+                    fetchEnrichedPrescriptions(user.id)
+                ]);
+                setPrescriptionsData(updatedPrescriptions);
+            }
+
+        } catch (error) {
+            console.error('Error creating prescription:', error);
+            toast.error("Failed to create prescription");
+        }
     };
 
     const getFrequencyBadge = (frequency: string) => {
@@ -93,6 +162,28 @@ export default function PrescriptionsPage({ onNavigate }: PrescriptionsPageProps
         if (duration.includes("7 days") || duration.includes("week")) return "text-orange-600";
         return "text-gray-600";
     };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                    <p className="mt-2 text-gray-600">Loading prescription data...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                    <div className="text-red-600 mb-2">Error loading prescription data</div>
+                    <p className="text-gray-600">{error}</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -145,7 +236,7 @@ export default function PrescriptionsPage({ onNavigate }: PrescriptionsPageProps
                                     <SelectContent>
                                         {medicines.map(medicine => (
                                             <SelectItem key={medicine.id} value={medicine.id.toString()}>
-                                                {medicine.name} ({medicine.type})
+                                                {medicine.name} ({medicine.description})
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
@@ -213,7 +304,7 @@ export default function PrescriptionsPage({ onNavigate }: PrescriptionsPageProps
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Total Prescriptions</p>
-                                <p className="text-2xl font-bold text-gray-900">{prescriptions.length}</p>
+                                <p className="text-2xl font-bold text-gray-900">{prescriptionsData.length}</p>
                             </div>
                             <div className="p-3 bg-blue-100 rounded-lg">
                                 <Pill className="h-5 w-5 text-blue-600" />
@@ -227,7 +318,7 @@ export default function PrescriptionsPage({ onNavigate }: PrescriptionsPageProps
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Active Prescriptions</p>
-                                <p className="text-2xl font-bold text-gray-900">{prescriptions.length}</p>
+                                <p className="text-2xl font-bold text-gray-900">{prescriptionsData.length}</p>
                             </div>
                             <div className="p-3 bg-green-100 rounded-lg">
                                 <Calendar className="h-5 w-5 text-green-600" />
@@ -241,7 +332,7 @@ export default function PrescriptionsPage({ onNavigate }: PrescriptionsPageProps
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Unique Patients</p>
-                                <p className="text-2xl font-bold text-gray-900">{new Set(enrichedPrescriptions.map(p => p.patient?.id)).size}</p>
+                                <p className="text-2xl font-bold text-gray-900">{new Set(prescriptionsData.map(p => p.patient?.id)).size}</p>
                             </div>
                             <div className="p-3 bg-purple-100 rounded-lg">
                                 <User className="h-5 w-5 text-purple-600" />
@@ -255,7 +346,7 @@ export default function PrescriptionsPage({ onNavigate }: PrescriptionsPageProps
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Unique Medicines</p>
-                                <p className="text-2xl font-bold text-gray-900">{new Set(enrichedPrescriptions.map(p => p.medicine?.id)).size}</p>
+                                <p className="text-2xl font-bold text-gray-900">{new Set(prescriptionsData.map(p => p.medicine?.id)).size}</p>
                             </div>
                             <div className="p-3 bg-orange-100 rounded-lg">
                                 <Pill className="h-5 w-5 text-orange-600" />
@@ -316,7 +407,6 @@ export default function PrescriptionsPage({ onNavigate }: PrescriptionsPageProps
                                 <TableHead>Dosage</TableHead>
                                 <TableHead>Frequency</TableHead>
                                 <TableHead>Duration</TableHead>
-                                <TableHead>Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -331,7 +421,7 @@ export default function PrescriptionsPage({ onNavigate }: PrescriptionsPageProps
                                     <TableCell>
                                         <div>
                                             <p className="font-medium">{prescription.medicine?.name || "Unknown Medicine"}</p>
-                                            <p className="text-sm text-gray-500">{prescription.medicine?.type}</p>
+                                            <p className="text-sm text-gray-500">{prescription.medicine?.description}</p>
                                         </div>
                                     </TableCell>
                                     <TableCell>
@@ -349,69 +439,10 @@ export default function PrescriptionsPage({ onNavigate }: PrescriptionsPageProps
                                             {prescription.duration}
                                         </span>
                                     </TableCell>
-                                    <TableCell>
-                                        <div className="flex space-x-2">
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                className="text-[#007BFF] border-[#007BFF] hover:bg-blue-50"
-                                            >
-                                                <Eye className="h-4 w-4 mr-1" />
-                                                View
-                                            </Button>
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                className="text-green-600 border-green-600 hover:bg-green-50"
-                                            >
-                                                <Edit className="h-4 w-4 mr-1" />
-                                                Edit
-                                            </Button>
-                                        </div>
-                                    </TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
                     </Table>
-                </CardContent>
-            </Card>
-
-            {/* Recent Activity */}
-            <Card className="border-0 shadow-md">
-                <CardHeader>
-                    <CardTitle className="flex items-center space-x-2">
-                        <AlertTriangle className="h-5 w-5 text-orange-500" />
-                        <span>Prescription Alerts</span>
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-3">
-                        <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                            <div className="flex items-center space-x-3">
-                                <AlertTriangle className="h-5 w-5 text-yellow-600" />
-                                <div>
-                                    <p className="font-medium text-yellow-800">Prescription Review Required</p>
-                                    <p className="text-sm text-yellow-600">John Smith's Lisinopril prescription needs renewal</p>
-                                </div>
-                            </div>
-                            <Button size="sm" variant="outline" className="text-yellow-700 border-yellow-300">
-                                Review
-                            </Button>
-                        </div>
-
-                        <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
-                            <div className="flex items-center space-x-3">
-                                <Calendar className="h-5 w-5 text-blue-600" />
-                                <div>
-                                    <p className="font-medium text-blue-800">Follow-up Required</p>
-                                    <p className="text-sm text-blue-600">Emily Davis should follow up on anxiety medication</p>
-                                </div>
-                            </div>
-                            <Button size="sm" variant="outline" className="text-blue-700 border-blue-300">
-                                Schedule
-                            </Button>
-                        </div>
-                    </div>
                 </CardContent>
             </Card>
         </div>

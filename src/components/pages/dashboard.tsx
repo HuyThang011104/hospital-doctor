@@ -1,24 +1,92 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
-import { Calendar, Users, TestTube, CalendarDays, Eye, Edit, FileText } from "lucide-react";
-import { appointments, getPatientById, getShiftById, getTodaysAppointments, labTests, leaveRequests } from "@/utils/mock/mock-data";
+import { Calendar, Users, TestTube, CalendarDays, Eye, FileText, Check, X } from "lucide-react";
+import { supabase } from "@/utils/backend/client";
+import { useAuth } from "@/hooks/use-auth";
+import { formatDateVn } from "@/utils/functions/formatTime";
+import { toast } from "sonner";
+import type { Appointment, LabTest, LeaveRequest } from "@/utils/mock/mock-data";
 
 interface DashboardPageProps {
     onNavigate: (page: string, data?: any) => void;
 }
 
 export default function DashboardPage({ onNavigate }: DashboardPageProps) {
+    const { user } = useAuth();
+    const [appointments, setAppointments] = useState<Appointment[]>([]);
+    const [labTests, setLabTests] = useState<LabTest[]>([]);
+    const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const fetchDashboardData = useCallback(async () => {
+        if (!user?.id) return;
+
+        try {
+            setLoading(true);
+
+            // Fetch appointments
+            const { data: appointmentsData, error: appointmentsError } = await supabase
+                .from("appointment")
+                .select(`
+                    *,
+                    patient(*),
+                    doctor(*),
+                    shift(*)
+                `)
+                .eq("doctor_id", user.id);
+
+            if (appointmentsError) throw appointmentsError;
+
+            // Fetch lab tests
+            const { data: labTestsData, error: labTestsError } = await supabase
+                .from("lab_test")
+                .select("*")
+                .is("result", null);
+
+            if (labTestsError) throw labTestsError;
+
+            // Fetch leave requests
+            const { data: leaveRequestsData, error: leaveRequestsError } = await supabase
+                .from("leave_request")
+                .select("*")
+                .eq("doctor_id", user.id)
+                .eq("status", "Pending");
+
+            if (leaveRequestsError) throw leaveRequestsError;
+
+            setAppointments(appointmentsData || []);
+            setLabTests(labTestsData || []);
+            setLeaveRequests(leaveRequestsData || []);
+        } catch (error) {
+            console.error("Error fetching dashboard data:", error);
+        } finally {
+            setLoading(false);
+        }
+    }, [user?.id]);
+
+    useEffect(() => {
+        fetchDashboardData();
+    }, [fetchDashboardData]);
+
+    const getTodaysAppointments = () => {
+        const today = new Date().toISOString().split('T')[0];
+        return appointments.filter(apt =>
+            apt.appointment_date.toString().startsWith(today)
+        );
+    };
+
     const todaysAppointments = getTodaysAppointments();
-    const pendingLabTests = labTests.filter(test => test.result === "Pending");
-    const pendingLeaveRequests = leaveRequests.filter(req => req.status === "Pending");
+    const pendingLabTests = labTests;
+    const pendingLeaveRequests = leaveRequests;
 
     const stats = [
         {
             title: "Total Appointments",
-            value: appointments.length,
+            value: loading ? "..." : appointments.length,
             description: "All appointments",
             icon: Calendar,
             color: "text-blue-600",
@@ -26,7 +94,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         },
         {
             title: "Today's Patients",
-            value: todaysAppointments.length,
+            value: loading ? "..." : todaysAppointments.length,
             description: "Scheduled for today",
             icon: Users,
             color: "text-green-600",
@@ -34,7 +102,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         },
         {
             title: "Pending Lab Tests",
-            value: pendingLabTests.length,
+            value: loading ? "..." : pendingLabTests.length,
             description: "Awaiting results",
             icon: TestTube,
             color: "text-orange-600",
@@ -42,7 +110,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         },
         {
             title: "Leave Requests",
-            value: pendingLeaveRequests.length,
+            value: loading ? "..." : pendingLeaveRequests.length,
             description: "Pending approval",
             icon: CalendarDays,
             color: "text-purple-600",
@@ -58,6 +126,34 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
             "In Progress": "bg-yellow-100 text-yellow-800"
         };
         return statusColors[status as keyof typeof statusColors] || "bg-gray-100 text-gray-800";
+    };
+
+    const handleAccept = async (appointment: Appointment) => {
+        const { error } = await supabase
+            .from("appointment")
+            .update({ status: "Accepted" })
+            .eq("id", appointment.id);
+
+        if (error) {
+            console.error(error);
+            toast.error("Không thể chấp nhận cuộc hẹn!");
+        } else {
+            toast.success("Đã chấp nhận cuộc hẹn!");
+        }
+    };
+
+    const handleReject = async (appointment: Appointment) => {
+        const { error } = await supabase
+            .from("appointment")
+            .update({ status: "Rejected" })
+            .eq("id", appointment.id);
+
+        if (error) {
+            console.error(error);
+            toast.error("Không thể từ chối cuộc hẹn!");
+        } else {
+            toast.success("Đã từ chối cuộc hẹn!");
+        }
     };
 
     return (
@@ -95,12 +191,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                         <span>Today's Appointments</span>
                     </CardTitle>
                     <CardDescription>
-                        Appointments scheduled for {new Date().toLocaleDateString('en-US', {
-                            weekday: 'long',
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric'
-                        })}
+                        Appointments scheduled for {formatDateVn(new Date().toISOString())}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -111,63 +202,87 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                                 <TableHead>Time</TableHead>
                                 <TableHead>Shift</TableHead>
                                 <TableHead>Status</TableHead>
-                                <TableHead>Notes</TableHead>
                                 <TableHead>Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {appointments.map((appointment) => {
-                                const patient = getPatientById(appointment.patient_id);
-                                const shift = getShiftById(appointment.shift_id);
-                                const appointmentTime = new Date(appointment.appointment_date);
+                            {loading ? (
+                                <TableRow>
+                                    <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                                        Loading appointments...
+                                    </TableCell>
+                                </TableRow>
+                            ) : todaysAppointments.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                                        No appointments scheduled for today
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                todaysAppointments.map((appointment) => {
+                                    const appointmentTime = new Date(appointment.appointment_date);
 
-                                return (
-                                    <TableRow key={appointment.id}>
-                                        <TableCell className="font-medium">
-                                            {patient?.full_name || "Unknown Patient"}
-                                        </TableCell>
-                                        <TableCell>
-                                            {appointmentTime.toLocaleTimeString('en-US', {
-                                                hour: '2-digit',
-                                                minute: '2-digit'
-                                            })}
-                                        </TableCell>
-                                        <TableCell>
-                                            {shift?.name || "Unknown Shift"}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge className={getStatusBadge(appointment.status)}>
-                                                {appointment.status}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="max-w-xs truncate">
-                                            {appointment.notes}
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex space-x-2">
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() => onNavigate("appointment-detail", appointment)}
-                                                    className="text-[#007BFF] border-[#007BFF] hover:bg-blue-50"
-                                                >
-                                                    <Eye className="h-4 w-4 mr-1" />
-                                                    View
-                                                </Button>
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() => onNavigate("appointment-detail", appointment)}
-                                                    className="text-green-600 border-green-600 hover:bg-green-50"
-                                                >
-                                                    <Edit className="h-4 w-4 mr-1" />
-                                                    Edit
-                                                </Button>
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                );
-                            })}
+                                    return (
+                                        <TableRow key={appointment.id}>
+                                            <TableCell className="font-medium">
+                                                {appointment.patient?.full_name || "Unknown Patient"}
+                                            </TableCell>
+                                            <TableCell>
+                                                {appointmentTime.toLocaleTimeString('en-US', {
+                                                    hour: '2-digit',
+                                                    minute: '2-digit'
+                                                })}
+                                            </TableCell>
+                                            <TableCell>
+                                                {appointment.shift?.name || "Unknown Shift"}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge className={getStatusBadge(appointment.status)}>
+                                                    {appointment.status}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="w-min whitespace-nowrap">
+                                                <div className="flex items-center gap-1">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => onNavigate("appointment-detail", appointment)}
+                                                        className="text-[#007BFF] border-[#007BFF] hover:bg-blue-50"
+                                                    >
+                                                        <Eye className="h-4 w-4 mr-1" />
+                                                        View
+                                                    </Button>
+                                                    {
+                                                        appointment.status !== "Completed" && (
+                                                            <>
+                                                                <span
+                                                                    role="button"
+                                                                    title="Accept"
+                                                                    aria-label="Accept appointment"
+                                                                    onClick={(e) => { e.stopPropagation(); handleAccept(appointment); }}
+                                                                    className="cursor-pointer p-1 rounded hover:bg-green-50"
+                                                                >
+                                                                    <Check className="h-4 w-4" color="green" />
+                                                                </span>
+
+                                                                <span
+                                                                    role="button"
+                                                                    title="Reject"
+                                                                    aria-label="Reject appointment"
+                                                                    onClick={(e) => { e.stopPropagation(); handleReject(appointment); }}
+                                                                    className="cursor-pointer p-1 rounded hover:bg-red-50"
+                                                                >
+                                                                    <X className="h-4 w-4" color="red" />
+                                                                </span>
+                                                            </>
+                                                        )
+                                                    }
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })
+                            )}
                         </TableBody>
                     </Table>
                 </CardContent>
