@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
@@ -6,12 +6,69 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Calendar, Clock, MapPin, Filter, ChevronLeft, ChevronRight } from "lucide-react";
-import { departments, doctorWorkSchedule, getDepartmentById, getRoomById, getShiftById } from "@/utils/mock/mock-data";
+import {
+    fetchScheduleWithDetails,
+    type DoctorWorkSchedule,
+    type Shift,
+    type Room,
+    type Department
+} from "@/utils/backend/work-schedule-service";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function WorkSchedulePage() {
+    const { user } = useAuth();
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [selectedDepartment, setSelectedDepartment] = useState("all");
     const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const [scheduleData, setScheduleData] = useState<{
+        schedules: DoctorWorkSchedule[];
+        shifts: Shift[];
+        rooms: Room[];
+        departments: Department[];
+    }>({
+        schedules: [],
+        shifts: [],
+        rooms: [],
+        departments: []
+    });
+
+    useEffect(() => {
+        const fetchScheduleData = async () => {
+            try {
+                setLoading(true);
+                setError(null);
+
+                if (!user?.id) {
+                    throw new Error('User not authenticated');
+                }
+
+                const data = await fetchScheduleWithDetails(user.id);
+                setScheduleData(data);
+            } catch (err) {
+                console.error('Error fetching schedule data:', err);
+                setError(err instanceof Error ? err.message : 'Failed to load schedule data');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchScheduleData();
+    }, [user?.id]);
+
+    const getShiftById = (id: number): Shift | undefined => {
+        return scheduleData.shifts.find(shift => shift.id === id);
+    };
+
+    const getRoomById = (id: number): Room | undefined => {
+        return scheduleData.rooms.find(room => room.id === id);
+    };
+
+    const getDepartmentById = (id: number): Department | undefined => {
+        return scheduleData.departments.find(dept => dept.id === id);
+    };
 
     // Generate date range for calendar view (current week)
     const generateWeekDates = (startDate: string) => {
@@ -40,7 +97,7 @@ export default function WorkSchedulePage() {
     const weekDates = generateWeekDates(currentWeekStart);
 
     const getScheduleForDate = (date: string) => {
-        return doctorWorkSchedule.filter(schedule => schedule.work_date === date);
+        return scheduleData.schedules.filter(schedule => schedule.work_date === date);
     };
 
     const getStatusBadge = (status: string) => {
@@ -60,18 +117,40 @@ export default function WorkSchedulePage() {
         setCurrentWeekStart(newStart.toISOString().split('T')[0]);
     };
 
-    const filteredSchedule = doctorWorkSchedule.filter(schedule => {
+    const filteredSchedule = scheduleData.schedules.filter(schedule => {
         if (selectedDepartment === "all") return true;
         const room = getRoomById(schedule.room_id);
         return room?.department_id.toString() === selectedDepartment;
     });
 
     const scheduleStats = {
-        totalShifts: doctorWorkSchedule.length,
-        thisWeekShifts: doctorWorkSchedule.filter(s => weekDates.includes(s.work_date)).length,
-        activeShifts: doctorWorkSchedule.filter(s => s.status === "Active").length,
-        completedShifts: doctorWorkSchedule.filter(s => s.status === "Completed").length
+        totalShifts: scheduleData.schedules.length,
+        thisWeekShifts: scheduleData.schedules.filter(s => weekDates.includes(s.work_date)).length,
+        activeShifts: scheduleData.schedules.filter(s => s.status === "Active").length,
+        completedShifts: scheduleData.schedules.filter(s => s.status === "Completed").length
     };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                    <p className="mt-2 text-gray-600">Loading schedule data...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                    <div className="text-red-600 mb-2">Error loading schedule data</div>
+                    <p className="text-gray-600">{error}</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -178,7 +257,7 @@ export default function WorkSchedulePage() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">All Departments</SelectItem>
-                                    {departments.map((dept) => (
+                                    {scheduleData.departments.map((dept) => (
                                         <SelectItem key={dept.id} value={dept.id.toString()}>
                                             {dept.name}
                                         </SelectItem>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -8,17 +8,65 @@ import { Badge } from "../ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { CalendarDays, Plus, Send, Clock, CheckCircle, XCircle } from "lucide-react";
 import { toast } from "sonner";
-import { leaveRequests } from "@/utils/mock/mock-data";
+import {
+    fetchLeaveRequestsByDoctor,
+    createLeaveRequest,
+    cancelLeaveRequest,
+    getLeaveRequestStats,
+    type LeaveRequest
+} from "@/utils/backend/leave-request-service";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function LeaveRequestsPage() {
+    const { user } = useAuth();
     const [showNewRequestForm, setShowNewRequestForm] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [newRequest, setNewRequest] = useState({
         start_date: "",
         end_date: "",
         reason: ""
     });
 
-    const handleSubmitRequest = () => {
+    const [leaveRequestsData, setLeaveRequestsData] = useState<LeaveRequest[]>([]);
+    const [stats, setStats] = useState({
+        total: 0,
+        pending: 0,
+        approved: 0,
+        rejected: 0,
+        cancelled: 0,
+        totalApprovedDays: 0
+    });
+
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                setLoading(true);
+                setError(null);
+
+                if (!user?.id) {
+                    throw new Error('User not authenticated');
+                }
+
+                const [requestsData, statsData] = await Promise.all([
+                    fetchLeaveRequestsByDoctor(user.id),
+                    getLeaveRequestStats(user.id)
+                ]);
+
+                setLeaveRequestsData(requestsData);
+                setStats(statsData);
+            } catch (err) {
+                console.error('Error fetching leave request data:', err);
+                setError(err instanceof Error ? err.message : 'Failed to load leave requests');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchData();
+    }, [user?.id]);
+
+    const handleSubmitRequest = async () => {
         if (!newRequest.start_date || !newRequest.end_date || !newRequest.reason.trim()) {
             toast.error("Please fill in all fields");
             return;
@@ -29,16 +77,65 @@ export default function LeaveRequestsPage() {
             return;
         }
 
-        toast.success("Leave request submitted successfully");
-        setNewRequest({ start_date: "", end_date: "", reason: "" });
-        setShowNewRequestForm(false);
+        try {
+            if (!user?.id) {
+                toast.error("User not authenticated");
+                return;
+            }
+
+            await createLeaveRequest({
+                doctor_id: user.id,
+                request_date: new Date().toISOString().split('T')[0],
+                start_date: newRequest.start_date,
+                end_date: newRequest.end_date,
+                reason: newRequest.reason,
+                status: "Pending"
+            });
+
+            toast.success("Leave request submitted successfully");
+            setNewRequest({ start_date: "", end_date: "", reason: "" });
+            setShowNewRequestForm(false);
+
+            // Refetch data to update the list and stats
+            const [updatedRequests, updatedStats] = await Promise.all([
+                fetchLeaveRequestsByDoctor(user.id),
+                getLeaveRequestStats(user.id)
+            ]);
+            setLeaveRequestsData(updatedRequests);
+            setStats(updatedStats);
+
+        } catch (error) {
+            console.error('Error creating leave request:', error);
+            toast.error("Failed to submit leave request");
+        }
+    };
+
+    const handleCancelRequest = async (requestId: number) => {
+        try {
+            await cancelLeaveRequest(requestId);
+            toast.success("Leave request cancelled successfully");
+
+            // Refetch data to update the list and stats
+            if (user?.id) {
+                const [updatedRequests, updatedStats] = await Promise.all([
+                    fetchLeaveRequestsByDoctor(user.id),
+                    getLeaveRequestStats(user.id)
+                ]);
+                setLeaveRequestsData(updatedRequests);
+                setStats(updatedStats);
+            }
+        } catch (error) {
+            console.error('Error cancelling leave request:', error);
+            toast.error("Failed to cancel leave request");
+        }
     };
 
     const getStatusBadge = (status: string) => {
         const statusConfig = {
             "Pending": { className: "bg-yellow-100 text-yellow-800", icon: Clock },
             "Approved": { className: "bg-green-100 text-green-800", icon: CheckCircle },
-            "Rejected": { className: "bg-red-100 text-red-800", icon: XCircle }
+            "Rejected": { className: "bg-red-100 text-red-800", icon: XCircle },
+            "Cancelled": { className: "bg-gray-100 text-gray-800", icon: XCircle }
         };
         const config = statusConfig[status as keyof typeof statusConfig] ||
             { className: "bg-gray-100 text-gray-800", icon: Clock };
@@ -60,44 +157,65 @@ export default function LeaveRequestsPage() {
         return diffDays;
     };
 
-    const stats = [
+    // Create stats array for rendering
+    const statsArray = [
         {
             title: "Total Requests",
-            value: leaveRequests.length,
+            value: stats.total,
             description: "All time",
             color: "text-blue-600",
             bgColor: "bg-blue-100"
         },
         {
             title: "Pending",
-            value: leaveRequests.filter(req => req.status === "Pending").length,
+            value: stats.pending,
             description: "Awaiting approval",
             color: "text-yellow-600",
             bgColor: "bg-yellow-100"
         },
         {
             title: "Approved",
-            value: leaveRequests.filter(req => req.status === "Approved").length,
+            value: stats.approved,
             description: "This year",
             color: "text-green-600",
             bgColor: "bg-green-100"
         },
         {
             title: "Days Off",
-            value: leaveRequests
-                .filter(req => req.status === "Approved")
-                .reduce((total, req) => total + calculateDuration(req.start_date, req.end_date), 0),
+            value: stats.totalApprovedDays,
             description: "Total approved",
             color: "text-purple-600",
             bgColor: "bg-purple-100"
         }
     ];
 
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                    <p className="mt-2 text-gray-600">Loading leave requests...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                    <div className="text-red-600 mb-2">Error loading leave requests</div>
+                    <p className="text-gray-600">{error}</p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-6">
             {/* Statistics */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {stats.map((stat, index) => (
+                {statsArray.map((stat, index) => (
                     <Card key={index} className="border-0 shadow-md">
                         <CardContent className="p-6">
                             <div className="flex items-center space-x-3">
@@ -219,49 +337,59 @@ export default function LeaveRequestsPage() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {leaveRequests.map((request) => {
-                                const duration = calculateDuration(request.start_date, request.end_date);
+                            {leaveRequestsData.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={6} className="text-center text-gray-500 py-8">
+                                        No leave requests found. Click "New Request" to submit your first request.
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                leaveRequestsData.map((request) => {
+                                    const duration = calculateDuration(request.start_date, request.end_date);
 
-                                return (
-                                    <TableRow key={request.id}>
-                                        <TableCell>
-                                            {new Date(request.request_date).toLocaleDateString()}
-                                        </TableCell>
-                                        <TableCell>
-                                            <div>
-                                                <p className="text-sm font-medium">
-                                                    {new Date(request.start_date).toLocaleDateString()} - {new Date(request.end_date).toLocaleDateString()}
+                                    return (
+                                        <TableRow key={request.id}>
+                                            <TableCell>
+                                                {new Date(request.request_date).toLocaleDateString()}
+                                            </TableCell>
+                                            <TableCell>
+                                                <div>
+                                                    <p className="text-sm font-medium">
+                                                        {new Date(request.start_date).toLocaleDateString()} - {new Date(request.end_date).toLocaleDateString()}
+                                                    </p>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant="outline">
+                                                    {duration} day{duration !== 1 ? 's' : ''}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="max-w-xs">
+                                                <p className="truncate" title={request.reason}>
+                                                    {request.reason}
                                                 </p>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline">
-                                                {duration} day{duration !== 1 ? 's' : ''}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="max-w-xs">
-                                            <p className="truncate" title={request.reason}>
-                                                {request.reason}
-                                            </p>
-                                        </TableCell>
-                                        <TableCell>
-                                            {getStatusBadge(request.status)}
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex space-x-2">
-                                                {request.status === "Pending" && (
-                                                    <Button variant="outline" size="sm" className="text-red-600 hover:bg-red-50">
-                                                        Cancel
-                                                    </Button>
-                                                )}
-                                                <Button variant="outline" size="sm">
-                                                    View
-                                                </Button>
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                );
-                            })}
+                                            </TableCell>
+                                            <TableCell>
+                                                {getStatusBadge(request.status)}
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex space-x-2">
+                                                    {request.status === "Pending" && (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="text-red-600 hover:bg-red-50"
+                                                            onClick={() => handleCancelRequest(request.id)}
+                                                        >
+                                                            Cancel
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })
+                            )}
                         </TableBody>
                     </Table>
                 </CardContent>

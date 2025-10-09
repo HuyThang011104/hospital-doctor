@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -9,10 +9,57 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Award, Plus, AlertTriangle, CheckCircle, Calendar, Building, Trash2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { certificates } from "@/utils/mock/mock-data";
+import type { Certificate } from "@/utils/mock/mock-data";
+import { supabase } from "@/utils/backend/client";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function CertificatesPage() {
     const [showNewCertForm, setShowNewCertForm] = useState(false);
+    const [certificates, setCertificates] = useState<Certificate[]>([]);
+    const { user } = useAuth();
+
+    useEffect(() => {
+        fetchCertificates();
+    }, [user?.id]);
+
+    const fetchCertificates = async () => {
+        try {
+            if (!user?.id) return;
+
+            const { data, error } = await supabase
+                .from("certificate")
+                .select(`
+                    *,
+                    doctor:doctor_id ( id, full_name )
+                `)
+                .eq("doctor_id", user.id);
+
+            if (error) throw error;
+            console.log("certificates", data);
+            setCertificates(data || []);
+        } catch (error) {
+            console.error("Error fetching certificates:", error);
+            toast.error("Failed to fetch certificates");
+        }
+    };
+
+    const handleDeleteCertificate = async (certificateId: number) => {
+        try {
+            const { error } = await supabase
+                .from("certificate")
+                .delete()
+                .eq("id", certificateId);
+
+            if (error) throw error;
+
+            toast.success("Certificate deleted successfully");
+            fetchCertificates();
+        } catch (error) {
+            console.error("Error deleting certificate:", error);
+            toast.error("Failed to delete certificate");
+        }
+    };
+
     const [newCertificate, setNewCertificate] = useState({
         name: "",
         issued_by: "",
@@ -20,7 +67,7 @@ export default function CertificatesPage() {
         expiry_date: ""
     });
 
-    const handleAddCertificate = () => {
+    const handleAddCertificate = async () => {
         if (!newCertificate.name.trim() || !newCertificate.issued_by.trim() ||
             !newCertificate.issue_date || !newCertificate.expiry_date) {
             toast.error("Please fill in all fields");
@@ -32,9 +79,32 @@ export default function CertificatesPage() {
             return;
         }
 
-        toast.success("Certificate added successfully");
-        setNewCertificate({ name: "", issued_by: "", issue_date: "", expiry_date: "" });
-        setShowNewCertForm(false);
+        try {
+            if (!user?.id) {
+                toast.error("User not authenticated");
+                return;
+            }
+
+            const { error } = await supabase
+                .from("certificate")
+                .insert([{
+                    doctor_id: user.id,
+                    name: newCertificate.name,
+                    issued_by: newCertificate.issued_by,
+                    issue_date: newCertificate.issue_date,
+                    expiry_date: newCertificate.expiry_date
+                }]);
+
+            if (error) throw error;
+
+            toast.success("Certificate added successfully");
+            setNewCertificate({ name: "", issued_by: "", issue_date: "", expiry_date: "" });
+            setShowNewCertForm(false);
+            fetchCertificates();
+        } catch (error) {
+            console.error("Error adding certificate:", error);
+            toast.error("Failed to add certificate");
+        }
     };
 
     const getDaysUntilExpiry = (expiryDate: string) => {
@@ -43,20 +113,6 @@ export default function CertificatesPage() {
         const diffTime = expiry.getTime() - today.getTime();
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         return diffDays;
-    };
-
-    const getExpiryStatus = (expiryDate: string) => {
-        const daysUntilExpiry = getDaysUntilExpiry(expiryDate);
-
-        if (daysUntilExpiry < 0) {
-            return { status: "Expired", color: "bg-red-100 text-red-800", days: Math.abs(daysUntilExpiry) };
-        } else if (daysUntilExpiry <= 30) {
-            return { status: "Expiring Soon", color: "bg-yellow-100 text-yellow-800", days: daysUntilExpiry };
-        } else if (daysUntilExpiry <= 90) {
-            return { status: "Renewal Due", color: "bg-orange-100 text-orange-800", days: daysUntilExpiry };
-        } else {
-            return { status: "Valid", color: "bg-green-100 text-green-800", days: daysUntilExpiry };
-        }
     };
 
     const categorizedCertificates = {
@@ -284,19 +340,31 @@ export default function CertificatesPage() {
                         </TabsList>
 
                         <TabsContent value="all">
-                            <CertificateTable certificates={certificates} />
+                            <CertificateTable
+                                certificates={certificates}
+                                onDelete={handleDeleteCertificate}
+                            />
                         </TabsContent>
 
                         <TabsContent value="medical">
-                            <CertificateTable certificates={categorizedCertificates.medical} />
+                            <CertificateTable
+                                certificates={categorizedCertificates.medical}
+                                onDelete={handleDeleteCertificate}
+                            />
                         </TabsContent>
 
                         <TabsContent value="emergency">
-                            <CertificateTable certificates={categorizedCertificates.emergency} />
+                            <CertificateTable
+                                certificates={categorizedCertificates.emergency}
+                                onDelete={handleDeleteCertificate}
+                            />
                         </TabsContent>
 
                         <TabsContent value="specialty">
-                            <CertificateTable certificates={categorizedCertificates.specialty} />
+                            <CertificateTable
+                                certificates={categorizedCertificates.specialty}
+                                onDelete={handleDeleteCertificate}
+                            />
                         </TabsContent>
                     </Tabs>
                 </CardContent>
@@ -305,7 +373,12 @@ export default function CertificatesPage() {
     );
 }
 
-function CertificateTable({ certificates: certs }: { certificates: any[] }) {
+interface CertificateTableProps {
+    certificates: any[];
+    onDelete: (id: number) => void;
+}
+
+function CertificateTable({ certificates: certs, onDelete }: CertificateTableProps) {
     const getDaysUntilExpiry = (expiryDate: string) => {
         const today = new Date();
         const expiry = new Date(expiryDate);
@@ -377,11 +450,12 @@ function CertificateTable({ certificates: certs }: { certificates: any[] }) {
                             </TableCell>
                             <TableCell>
                                 <div className="flex space-x-2">
-                                    <Button variant="outline" size="sm" className="text-[#007BFF] border-[#007BFF] hover:bg-blue-50">
-                                        <RefreshCw className="h-4 w-4 mr-1" />
-                                        Renew
-                                    </Button>
-                                    <Button variant="outline" size="sm" className="text-red-600 border-red-600 hover:bg-red-50">
+                                    <Button
+                                        onClick={() => onDelete(cert.id)}
+                                        variant="outline"
+                                        size="sm"
+                                        className="text-red-600 border-red-600 hover:bg-red-50"
+                                    >
                                         <Trash2 className="h-4 w-4" />
                                     </Button>
                                 </div>
@@ -391,7 +465,7 @@ function CertificateTable({ certificates: certs }: { certificates: any[] }) {
                 })}
                 {certs.length === 0 && (
                     <TableRow>
-                        <TableCell colSpan={6} className="text-center text-gray-500">
+                        <TableCell colSpan={6} className="text-center text-gray-500 py-8">
                             No certificates found in this category
                         </TableCell>
                     </TableRow>
