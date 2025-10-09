@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -7,8 +6,8 @@ import { Textarea } from "../ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Badge } from "../ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
-import { getLabTestsByRecordId, getMedicineById, getPatientById, getPrescriptionsByRecordId, getShiftById, type Appointment, type LabTest, type MedicalRecord, type Medicine, type Prescription } from "@/utils/mock/mock-data";
-import { useEffect, useState } from "react";
+import { type Appointment, type LabTest, type MedicalRecord, type Medicine, type Prescription } from "@/utils/mock/mock-data";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ArrowLeft, Calendar, CheckCircle, Plus, Save, Trash2, User } from "lucide-react";
 import { supabase } from "@/utils/backend/client";
@@ -18,29 +17,33 @@ interface AppointmentDetailPageProps {
     onBack: () => void;
 }
 
+type AppointmentMedicalRecord = MedicalRecord & {
+    appointment_id?: string | number | null;
+};
+
 export default function AppointmentDetailPage({ appointment, onBack }: AppointmentDetailPageProps) {
-    const [medicalRecords, setMedicalRecords] = useState<MedicalRecord[]>([]);
+    const [medicalRecord, setMedicalRecord] = useState<AppointmentMedicalRecord | null>(null);
     const [medicines, setMedicines] = useState<Medicine[]>([]);
-    const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
+    const [recordPrescriptions, setRecordPrescriptions] = useState<Prescription[]>([]);
+    const [recordLabTests, setRecordLabTests] = useState<LabTest[]>([]);
     const [labTests, setLabTests] = useState<LabTest[]>([]);
     useEffect(() => {
-        const fetchMedicalRecords = async () => {
+        const fetchMedicalRecord = async () => {
             try {
                 const { data, error } = await supabase.from("medical_record")
-                    .select(`*,
-                    patient(*),
-                    doctor(*)
-                `)
+                    .select(`*, patient(*), doctor(*)`)
+                    .eq("appointment_id", appointment.id)
+                    .maybeSingle();
+
                 if (error) throw error;
-                console.log("Medical Records: ", data);
-                if (data) {
-                    setMedicalRecords(data);
-                }
+
+                setMedicalRecord(data ?? null);
             } catch (error) {
-                console.error("Error fetching medical records:", error);
+                console.error("Error fetching medical record:", error);
+                setMedicalRecord(null);
             }
         }
-        fetchMedicalRecords();
+        fetchMedicalRecord();
     }, [appointment.id]);
 
     useEffect(() => {
@@ -63,31 +66,11 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
     }, []);
 
     useEffect(() => {
-        const fetchPrescriptions = async () => {
-            try {
-                const { data, error } = await supabase.from("prescription")
-                    .select(`*`);
-                if (error) throw error;
-                console.log("Prescription: ", data);
-                if (data) {
-                    setPrescriptions(data);
-                }
-            } catch (error) {
-                console.error("Error fetching prescription:", error);
-            }
-        }
-        fetchPrescriptions();
-    }, []);
-
-    useEffect(() => {
         const fetchLabTests = async () => {
             try {
-                const { data, error } = await supabase.from("lab_test")
-                    .select(`
-                    *
-                `);
+                const { data, error } = await supabase.from("lab_test").select(`*`);
                 if (error) throw error;
-                console.log("Lab Test: ", data);
+                console.log("Lab tests: ", data);
                 if (data) {
                     setLabTests(data);
                 }
@@ -96,7 +79,43 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
             }
         }
         fetchLabTests();
-    }, []);
+    }, [medicalRecord?.id]);
+
+    const recordId = useMemo(() => {
+        if (!medicalRecord) return undefined;
+        if (medicalRecord.appointment_id && String(medicalRecord.appointment_id) !== String(appointment.id)) {
+            return undefined;
+        }
+        return medicalRecord.id ? String(medicalRecord.id) : undefined;
+    }, [medicalRecord, appointment.id]);
+
+    useEffect(() => {
+        if (!recordId) {
+            setRecordPrescriptions([]);
+            setRecordLabTests([]);
+            return;
+        }
+
+        const fetchRecordDetails = async () => {
+            try {
+                const [prescriptionsResult, labTestsResult] = await Promise.all([
+                    supabase.from("prescription").select(`*`).eq("medical_record_id", recordId),
+                    supabase.from("lab_test").select(`*`).eq("medical_record_id", recordId)
+                ]);
+
+                if (prescriptionsResult.error) throw prescriptionsResult.error;
+                if (labTestsResult.error) throw labTestsResult.error;
+
+                setRecordPrescriptions(prescriptionsResult.data ?? []);
+                setRecordLabTests(labTestsResult.data ?? []);
+            } catch (error) {
+                console.error("Error fetching record details:", error);
+                toast.error("Failed to load record details");
+            }
+        };
+
+        fetchRecordDetails();
+    }, [recordId]);
     const patient = appointment.patient;
     const shift = appointment.shift;
     const appointmentDate = new Date(appointment.appointment_date);
@@ -108,7 +127,7 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
 
     // Lab test state
     const [newLabTest, setNewLabTest] = useState({
-        test_type: "",
+        lab_test_id: "",
         test_date: new Date().toISOString().split('T')[0]
     });
     const [showLabTestForm, setShowLabTestForm] = useState(false);
@@ -123,61 +142,179 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
     const [showPrescriptionForm, setShowPrescriptionForm] = useState(false);
 
     // Find existing medical record for this appointment
-    const existingRecord = medicalRecords.find(
-        record => record.patient_id === appointment.patient_id &&
-            record.doctor_id === appointment.doctor_id
-    );
-
-    const recordPrescriptions = existingRecord ? getPrescriptionsByRecordId(existingRecord.id, prescriptions) : [];
-    const recordLabTests = existingRecord ? getLabTestsByRecordId(existingRecord.id, labTests) : [];
+    const findMedicineById = (id: string | number) => {
+        return medicines.find((medicine) => String(medicine.id) === String(id));
+    };
 
     useEffect(() => {
-        if (existingRecord) {
-            setDiagnosis(existingRecord.diagnosis);
-            setTreatment(existingRecord.treatment);
+        if (medicalRecord) {
+            setDiagnosis(medicalRecord.diagnosis);
+            setTreatment(medicalRecord.treatment);
+        } else {
+            setDiagnosis("");
+            setTreatment("");
         }
-    }, [existingRecord]);
+    }, [medicalRecord]);
 
-    const handleSaveRecord = () => {
+    const handleSaveRecord = async () => {
         if (!diagnosis.trim() || !treatment.trim()) {
             toast.error("Please fill in both diagnosis and treatment");
             return;
         }
 
-        toast.success("Medical record saved successfully");
+        try {
+            let recordIdToUse = recordId;
+
+            if (recordIdToUse) {
+                // Cập nhật record
+                const { error } = await supabase
+                    .from("medical_record")
+                    .update({
+                        diagnosis,
+                        treatment,
+                        updated_at: new Date().toISOString(),
+                    })
+                    .eq("id", recordIdToUse);
+
+                if (error) throw error;
+            } else {
+                // Tạo mới record
+                const { data, error } = await supabase
+                    .from("medical_record")
+                    .insert([{
+                        appointment_id: appointment.id,
+                        doctor_id: appointment.doctor_id,
+                        patient_id: appointment.patient_id,
+                        diagnosis,
+                        treatment,
+                        created_at: new Date().toISOString(),
+                    }])
+                    .select()
+                    .single();
+
+                if (error) throw error;
+                recordIdToUse = data.id;
+                setMedicalRecord(data);
+            }
+
+            // Cập nhật ghi chú cuộc hẹn
+            const { error: updateAppointmentError } = await supabase
+                .from("appointment")
+                .update({ notes })
+                .eq("id", appointment.id);
+
+            if (updateAppointmentError) throw updateAppointmentError;
+
+            toast.success("Medical record saved successfully");
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to save medical record");
+        }
     };
 
-    const handleCompleteAppointment = () => {
+
+    const handleCompleteAppointment = async () => {
         if (!diagnosis.trim() || !treatment.trim()) {
             toast.error("Please complete the medical record before marking as completed");
             return;
         }
 
-        toast.success("Appointment marked as completed");
+        try {
+            await handleSaveRecord();
+
+            const { error } = await supabase
+                .from("appointment")
+                .update({ status: "Completed" })
+                .eq("id", appointment.id);
+
+            if (error) throw error;
+
+            toast.success("Appointment marked as completed");
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to complete appointment");
+        }
     };
 
-    const handleAddLabTest = () => {
-        if (!newLabTest.test_type.trim()) {
-            toast.error("Please enter test type");
+    const handleAddLabTest = async () => {
+        if (!newLabTest.lab_test_id) {
+            toast.error("Please select a test type");
+            return;
+        }
+        if (!recordId) {
+            toast.error("Please save medical record first");
             return;
         }
 
-        toast.success("Lab test ordered successfully");
-        setNewLabTest({ test_type: "", test_date: new Date().toISOString().split('T')[0] });
-        setShowLabTestForm(false);
+        try {
+            const selectedTest = labTests.find(
+                (t) => String(t.id) === newLabTest.lab_test_id
+            );
+
+            const { data, error } = await supabase
+                .from("lab_test")
+                .insert([
+                    {
+                        medical_record_id: recordId,
+                        test_type: selectedTest?.test_type || "",
+                        test_date: newLabTest.test_date,
+                        result: null,
+                    },
+                ])
+                .select();
+
+            if (error) throw error;
+
+            setRecordLabTests([...recordLabTests, ...data]);
+            setNewLabTest({
+                lab_test_id: "",
+                test_date: new Date().toISOString().split("T")[0],
+            });
+            setShowLabTestForm(false);
+            toast.success("Lab test ordered successfully");
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to add lab test");
+        }
     };
 
-    const handleAddPrescription = () => {
+
+
+    const handleAddPrescription = async () => {
         if (!newPrescription.medicine_id || !newPrescription.dosage.trim() ||
             !newPrescription.frequency.trim() || !newPrescription.duration.trim()) {
             toast.error("Please fill in all prescription fields");
             return;
         }
+        if (!recordId) {
+            toast.error("Please save medical record first");
+            return;
+        }
 
-        toast.success("Prescription added successfully");
-        setNewPrescription({ medicine_id: "", dosage: "", frequency: "", duration: "" });
-        setShowPrescriptionForm(false);
+        try {
+            const { data, error } = await supabase
+                .from("prescription")
+                .insert([{
+                    medical_record_id: recordId,
+                    medicine_id: newPrescription.medicine_id,
+                    dosage: newPrescription.dosage,
+                    frequency: newPrescription.frequency,
+                    duration: newPrescription.duration,
+                }])
+                .select();
+
+            if (error) throw error;
+
+            setRecordPrescriptions([...recordPrescriptions, ...data]);
+            setNewPrescription({ medicine_id: "", dosage: "", frequency: "", duration: "" });
+            setShowPrescriptionForm(false);
+            toast.success("Prescription added successfully");
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to add prescription");
+        }
     };
+
 
     const getStatusBadge = (status: string) => {
         const statusColors = {
@@ -377,24 +514,39 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
                             <CardContent className="pt-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
-                                        <Label htmlFor="test_type">Test Type</Label>
-                                        <Input
-                                            id="test_type"
-                                            value={newLabTest.test_type}
-                                            onChange={(e) => setNewLabTest({ ...newLabTest, test_type: e.target.value })}
-                                            placeholder="e.g., Complete Blood Count"
-                                        />
+                                        <Label htmlFor="lab_test">Test Type</Label>
+                                        <Select
+                                            value={newLabTest.lab_test_id}
+                                            onValueChange={(value) =>
+                                                setNewLabTest({ ...newLabTest, lab_test_id: value })
+                                            }
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select test type" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {labTests.map((test) => (
+                                                    <SelectItem key={test.id} value={test.id.toString()}>
+                                                        {test.test_type}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
                                     </div>
+
                                     <div>
                                         <Label htmlFor="test_date">Test Date</Label>
                                         <Input
                                             id="test_date"
                                             type="date"
                                             value={newLabTest.test_date}
-                                            onChange={(e) => setNewLabTest({ ...newLabTest, test_date: e.target.value })}
+                                            onChange={(e) =>
+                                                setNewLabTest({ ...newLabTest, test_date: e.target.value })
+                                            }
                                         />
                                     </div>
                                 </div>
+
                                 <div className="flex space-x-2 mt-4">
                                     <Button onClick={handleAddLabTest} size="sm">
                                         Order Test
@@ -410,6 +562,7 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
                             </CardContent>
                         </Card>
                     )}
+
 
                     <Table>
                         <TableHeader>
@@ -541,7 +694,7 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
                         </TableHeader>
                         <TableBody>
                             {recordPrescriptions.map((prescription) => {
-                                const medicine = getMedicineById(prescription.medicine_id, medicines);
+                                const medicine = findMedicineById(prescription.medicine_id);
                                 return (
                                     <TableRow key={prescription.id}>
                                         <TableCell className="font-medium">

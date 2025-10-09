@@ -6,7 +6,7 @@ import { Badge } from "../ui/badge";
 import { Input } from "../ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
-import { Calendar, Search, Filter, Plus, Eye, Clock, Check, X } from "lucide-react";
+import { Calendar, Search, Filter, Eye, Clock, Check, X } from "lucide-react";
 import { type Appointment } from "@/utils/mock/mock-data";
 import { supabase } from "@/utils/backend/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -120,10 +120,10 @@ export default function AppointmentsPage({ onNavigate }: AppointmentsPageProps) 
                     <h1 className="text-2xl font-bold text-gray-900">Appointments</h1>
                     <p className="text-gray-600 mt-1">Manage all patient appointments</p>
                 </div>
-                <Button className="bg-[#007BFF] hover:bg-blue-600">
+                {/* <Button className="bg-[#007BFF] hover:bg-blue-600">
                     <Plus className="h-4 w-4 mr-2" />
                     New Appointment
-                </Button>
+                </Button> */}
             </div>
 
             {/* Statistics Cards */}
@@ -267,12 +267,12 @@ export default function AppointmentsPage({ onNavigate }: AppointmentsPageProps) 
                                                 <p className="font-medium">
                                                     {appointmentDate.toLocaleDateString()}
                                                 </p>
-                                                <p className="text-sm text-gray-500">
+                                                {/* <p className="text-sm text-gray-500">
                                                     {appointmentDate.toLocaleTimeString('en-US', {
                                                         hour: '2-digit',
                                                         minute: '2-digit'
                                                     })}
-                                                </p>
+                                                </p> */}
                                             </div>
                                         </TableCell>
                                         <TableCell>
@@ -299,28 +299,32 @@ export default function AppointmentsPage({ onNavigate }: AppointmentsPageProps) 
                                                     <Eye className="h-4 w-4 mr-1" />
                                                     View
                                                 </Button>
+                                                {
+                                                    appointment.status !== "Completed" && (
+                                                        <>
+                                                            <span
+                                                                role="button"
+                                                                title="Accept"
+                                                                aria-label="Accept appointment"
+                                                                onClick={(e) => { e.stopPropagation(); handleAccept(appointment); }}
+                                                                className="cursor-pointer p-1 rounded hover:bg-green-50"
+                                                            >
+                                                                <Check className="h-4 w-4" color="green" />
+                                                            </span>
 
-                                                {/* Accept - chỉ icon, rất gọn */}
-                                                <span
-                                                    role="button"
-                                                    title="Accept"
-                                                    aria-label="Accept appointment"
-                                                    onClick={(e) => { e.stopPropagation(); handleAccept(appointment); }}
-                                                    className="cursor-pointer p-1 rounded hover:bg-green-50"
-                                                >
-                                                    <Check className="h-4 w-4" color="green" />
-                                                </span>
+                                                            <span
+                                                                role="button"
+                                                                title="Reject"
+                                                                aria-label="Reject appointment"
+                                                                onClick={(e) => { e.stopPropagation(); handleReject(appointment); }}
+                                                                className="cursor-pointer p-1 rounded hover:bg-red-50"
+                                                            >
+                                                                <X className="h-4 w-4" color="red" />
+                                                            </span>
+                                                        </>
+                                                    )
+                                                }
 
-                                                {/* Reject - chỉ icon, rất gọn */}
-                                                <span
-                                                    role="button"
-                                                    title="Reject"
-                                                    aria-label="Reject appointment"
-                                                    onClick={(e) => { e.stopPropagation(); handleReject(appointment); }}
-                                                    className="cursor-pointer p-1 rounded hover:bg-red-50"
-                                                >
-                                                    <X className="h-4 w-4" color="red" />
-                                                </span>
                                             </div>
                                         </TableCell>
                                     </TableRow>
