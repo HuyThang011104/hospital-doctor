@@ -1,4 +1,5 @@
-import { useState } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -8,12 +9,109 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { FileText, Search, Eye, Users, TestTube, Pill, Calendar } from "lucide-react";
-import { getLabTestsByRecordId, getMedicineById, getPatientById, getPrescriptionsByRecordId, labTests, medicalRecords, prescriptions } from "@/utils/mock/mock-data";
+import type { MedicalRecord, Patient, Prescription, Medicine, LabTest } from "@/utils/mock/mock-data";
+import { supabase } from "@/utils/backend/client";
+import { useAuth } from "@/hooks/use-auth";
+import { toast } from "sonner";
 
-export default function MedicalRecordsPage() {
+interface MedicalRecordsPageProps {
+    onNavigate: (page: string, data?: any) => void;
+}
+
+export default function MedicalRecordsPage({ onNavigate }: MedicalRecordsPageProps) {
+    const { user } = useAuth();
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedRecord, setSelectedRecord] = useState<any>(null);
-    const [filterType, setFilterType] = useState("all");
+    const [medicalRecords, setMedicalRecords] = useState<MedicalRecord[]>([]);
+    const [patients, setPatients] = useState<Patient[]>([]);
+    const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
+    const [medicines, setMedicines] = useState<Medicine[]>([]);
+    const [labTests, setLabTests] = useState<LabTest[]>([]);
+    const [loading, setLoading] = useState(true);
+
+
+
+    const fetchMedicalRecordsData = useCallback(async () => {
+        if (!user?.id) return;
+
+        try {
+            setLoading(true);
+
+            // Fetch medical records for this doctor
+            const { data: recordsData, error: recordsError } = await supabase
+                .from("medical_record")
+                .select("*")
+                .eq("doctor_id", user.id);
+
+            if (recordsError) throw recordsError;
+
+            // Fetch patients who have records with this doctor
+            const patientIds = [...new Set(recordsData?.map(r => r.patient_id) || [])];
+            const { data: patientsData, error: patientsError } = await supabase
+                .from("patient")
+                .select("*")
+                .in("id", patientIds);
+
+            if (patientsError) throw patientsError;
+
+            // Fetch prescriptions for these medical records
+            const recordIds = [...new Set(recordsData?.map(r => r.id) || [])];
+            const { data: prescriptionsData, error: prescriptionsError } = await supabase
+                .from("prescription")
+                .select("*")
+                .in("medical_record_id", recordIds);
+
+            if (prescriptionsError) throw prescriptionsError;
+
+            // Fetch medicines referenced in prescriptions
+            const medicineIds = [...new Set(prescriptionsData?.map(p => p.medicine_id) || [])];
+            const { data: medicinesData, error: medicinesError } = await supabase
+                .from("medicine")
+                .select("*")
+                .in("id", medicineIds);
+
+            if (medicinesError) throw medicinesError;
+
+            // Fetch lab tests for these medical records
+            const { data: labTestsData, error: labTestsError } = await supabase
+                .from("lab_test")
+                .select("*")
+                .in("medical_record_id", recordIds);
+
+            if (labTestsError) throw labTestsError;
+
+            setMedicalRecords(recordsData || []);
+            setPatients(patientsData || []);
+            setPrescriptions(prescriptionsData || []);
+            setMedicines(medicinesData || []);
+            setLabTests(labTestsData || []);
+
+        } catch (error) {
+            console.error("Error fetching medical records data:", error);
+            toast.error("Failed to load medical records");
+        } finally {
+            setLoading(false);
+        }
+    }, [user?.id]);
+    useEffect(() => {
+        fetchMedicalRecordsData();
+    }, [fetchMedicalRecordsData]);
+
+    const getPatientById = (id: number): Patient | undefined => {
+        return patients.find(p => p.id === id);
+    };
+
+    const getPrescriptionsByRecordId = (recordId: number): Prescription[] => {
+        return prescriptions.filter(p => p.medical_record_id === recordId);
+    };
+
+    const getMedicineById = (id: number): Medicine | undefined => {
+        return medicines.find(m => m.id === id);
+    };
+
+    const getLabTestsByRecordId = (recordId: number): LabTest[] => {
+        return labTests.filter(l => l.medical_record_id === recordId);
+    };
 
     const filteredRecords = medicalRecords.filter(record => {
         const patient = getPatientById(record.patient_id);
@@ -70,6 +168,21 @@ export default function MedicalRecordsPage() {
         setSelectedRecord(record);
     };
 
+    // const handleCreateNewRecord = () => {
+    //     onNavigate('create-medical-record');
+    // };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-screen">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                    <p className="mt-4 text-gray-600">Loading medical records...</p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-6">
             {/* Statistics */}
@@ -98,8 +211,16 @@ export default function MedicalRecordsPage() {
             {/* Search and Filters */}
             <Card className="border-0 shadow-md">
                 <CardHeader>
-                    <CardTitle>Search Medical Records</CardTitle>
-                    <CardDescription>Find patient records by name, diagnosis, or treatment</CardDescription>
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <CardTitle>Search Medical Records</CardTitle>
+                            <CardDescription>Find patient records by name, diagnosis, or treatment</CardDescription>
+                        </div>
+                        {/* <Button onClick={handleCreateNewRecord} className="bg-[#007BFF] hover:bg-blue-600">
+                            <FileText className="h-4 w-4 mr-2" />
+                            Create New Record
+                        </Button> */}
+                    </div>
                 </CardHeader>
                 <CardContent>
                     <div className="flex flex-col md:flex-row gap-4">
@@ -236,15 +357,28 @@ export default function MedicalRecordsPage() {
                                             </Badge>
                                         </TableCell>
                                         <TableCell>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => openRecordDetail(record)}
-                                                className="text-[#007BFF] border-[#007BFF] hover:bg-blue-50"
-                                            >
-                                                <Eye className="h-4 w-4 mr-1" />
-                                                View
-                                            </Button>
+                                            <div className="flex space-x-2">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => openRecordDetail(record)}
+                                                    className="text-[#007BFF] border-[#007BFF] hover:bg-blue-50"
+                                                >
+                                                    <Eye className="h-4 w-4 mr-1" />
+                                                    View
+                                                </Button>
+                                                {recordPrescriptions.length > 0 && (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => onNavigate('prescription', { medicalRecord: record })}
+                                                        className="text-purple-600 border-purple-600 hover:bg-purple-50"
+                                                    >
+                                                        <Pill className="h-4 w-4 mr-1" />
+                                                        Prescriptions
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 );
@@ -354,7 +488,6 @@ export default function MedicalRecordsPage() {
                                                                 <TableCell>
                                                                     <div>
                                                                         <p className="font-medium">{medicine?.name}</p>
-                                                                        <p className="text-sm text-gray-600">{medicine?.type}</p>
                                                                     </div>
                                                                 </TableCell>
                                                                 <TableCell>{prescription.dosage}</TableCell>
@@ -396,17 +529,8 @@ export default function MedicalRecordsPage() {
                                                             <TableCell className="font-medium">{test.test_type}</TableCell>
                                                             <TableCell>{test.test_date}</TableCell>
                                                             <TableCell>
-                                                                <Badge
-                                                                    className={
-                                                                        test.result.toLowerCase().includes('normal') ?
-                                                                            'bg-green-100 text-green-800' :
-                                                                            test.result.toLowerCase().includes('elevated') || test.result.toLowerCase().includes('high') ?
-                                                                                'bg-red-100 text-red-800' :
-                                                                                'bg-gray-100 text-gray-800'
-                                                                    }
-                                                                >
-                                                                    {test.result}
-                                                                </Badge>
+
+                                                                {test.result}
                                                             </TableCell>
                                                         </TableRow>
                                                     ))}
