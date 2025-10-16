@@ -45,7 +45,7 @@ function AppContent() {
       case "schedule":
         return <WorkSchedulePage />;
       case "records":
-        return <MedicalRecordsPage />;
+        return <MedicalRecordsPage onNavigate={handleNavigate} />;
       case "prescriptions":
         return <PrescriptionsPage onNavigate={handleNavigate} />;
       case "leave":
