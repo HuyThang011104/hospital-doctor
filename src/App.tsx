@@ -15,11 +15,12 @@ import { useAuth } from "./hooks/use-auth";
 import { AuthProvider } from "./context/auth-context";
 
 function AppContent() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, logout } = useAuth();
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [pageData, setPageData] = useState<any>(null);
 
   const handleLogout = () => {
+    logout();
     setCurrentPage("dashboard");
     setPageData(null);
   };
