@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
@@ -6,7 +7,7 @@ import { Badge } from "../ui/badge";
 import { Input } from "../ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
-import { Calendar, Search, Filter, Eye, Clock, Check, X } from "lucide-react";
+import { Calendar, Search, Filter, Eye, Clock, Check, X, AlertTriangle } from "lucide-react";
 import { type Appointment } from "@/utils/mock/mock-data";
 import { supabase } from "@/utils/backend/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -94,6 +95,14 @@ export default function AppointmentsPage({ onNavigate }: AppointmentsPageProps) 
             toast.error("Không thể chấp nhận cuộc hẹn!");
         } else {
             toast.success("Đã chấp nhận cuộc hẹn!");
+            // Update local state immediately
+            setAppointments(prev =>
+                prev.map(apt =>
+                    apt.id === appointment.id
+                        ? { ...apt, status: "Accepted" }
+                        : apt
+                )
+            );
         }
     };
 
@@ -108,6 +117,14 @@ export default function AppointmentsPage({ onNavigate }: AppointmentsPageProps) 
             toast.error("Không thể từ chối cuộc hẹn!");
         } else {
             toast.success("Đã từ chối cuộc hẹn!");
+            // Update local state immediately
+            setAppointments(prev =>
+                prev.map(apt =>
+                    apt.id === appointment.id
+                        ? { ...apt, status: "Rejected" }
+                        : apt
+                )
+            );
         }
     };
 
@@ -253,9 +270,13 @@ export default function AppointmentsPage({ onNavigate }: AppointmentsPageProps) 
                         <TableBody>
                             {filteredAppointments.map((appointment) => {
                                 const appointmentDate = new Date(appointment.appointment_date);
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+                                const isPastDate = appointmentDate < today;
+                                const isPending = appointment.status === "Scheduled" || appointment.status === "Pending";
 
                                 return (
-                                    <TableRow key={appointment.id}>
+                                    <TableRow key={appointment.id} className={isPastDate && isPending ? "bg-red-50" : ""}>
                                         <TableCell>
                                             <div>
                                                 <p className="font-medium">{appointment.patient?.full_name || "Unknown Patient"}</p>
@@ -263,17 +284,20 @@ export default function AppointmentsPage({ onNavigate }: AppointmentsPageProps) 
                                             </div>
                                         </TableCell>
                                         <TableCell>
-                                            <div>
+                                            <div className="flex items-center gap-2">
                                                 <p className="font-medium">
                                                     {appointmentDate.toLocaleDateString()}
                                                 </p>
-                                                {/* <p className="text-sm text-gray-500">
-                                                    {appointmentDate.toLocaleTimeString('en-US', {
-                                                        hour: '2-digit',
-                                                        minute: '2-digit'
-                                                    })}
-                                                </p> */}
+                                                {isPastDate && isPending && (
+                                                    <AlertTriangle className="h-4 w-4 text-red-500" />
+                                                )}
                                             </div>
+                                            {/* <p className="text-sm text-gray-500">
+                                                {appointmentDate.toLocaleTimeString('en-US', {
+                                                    hour: '2-digit',
+                                                    minute: '2-digit'
+                                                })}
+                                            </p> */}
                                         </TableCell>
                                         <TableCell>
                                             <Badge variant="outline">
@@ -281,9 +305,14 @@ export default function AppointmentsPage({ onNavigate }: AppointmentsPageProps) 
                                             </Badge>
                                         </TableCell>
                                         <TableCell>
-                                            <Badge className={getStatusBadge(appointment.status)}>
-                                                {appointment.status}
-                                            </Badge>
+                                            <div className="flex items-center gap-2">
+                                                <Badge className={getStatusBadge(appointment.status)}>
+                                                    {appointment.status}
+                                                </Badge>
+                                                {isPastDate && isPending && (
+                                                    <span className="text-xs text-red-600 font-medium">Quá hạn</span>
+                                                )}
+                                            </div>
                                         </TableCell>
                                         <TableCell className="max-w-xs">
                                             <p className="truncate">{appointment.notes}</p>
@@ -300,7 +329,7 @@ export default function AppointmentsPage({ onNavigate }: AppointmentsPageProps) 
                                                     View
                                                 </Button>
                                                 {
-                                                    appointment.status !== "Completed" && (
+                                                    appointment.status !== "Completed" && !isPastDate && (
                                                         <>
                                                             <span
                                                                 role="button"
