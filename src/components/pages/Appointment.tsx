@@ -259,12 +259,12 @@ export default function AppointmentsPage({ onNavigate }: AppointmentsPageProps) 
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>Patient</TableHead>
-                                <TableHead>Date & Time</TableHead>
-                                <TableHead>Shift</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Notes</TableHead>
-                                <TableHead>Actions</TableHead>
+                                <TableHead>Khách Hàng</TableHead>
+                                <TableHead>Ngày & Thời Gian</TableHead>
+                                <TableHead>Ca</TableHead>
+                                <TableHead>Trạng Thái</TableHead>
+                                <TableHead>Ghi Chú</TableHead>
+                                <TableHead>Hành Động</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>

@@ -191,18 +191,18 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                         <span>Today's Appointments</span>
                     </CardTitle>
                     <CardDescription>
-                        Appointments scheduled for {formatDateVn(new Date().toISOString())}
+                        Lịch hẹn hôm nay {formatDateVn(new Date().toISOString())}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>Patient Name</TableHead>
-                                <TableHead>Time</TableHead>
-                                <TableHead>Shift</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Actions</TableHead>
+                                <TableHead>Khách Hàng</TableHead>
+                                <TableHead>Thời Gian</TableHead>
+                                <TableHead>Ca</TableHead>
+                                <TableHead>Trạng Thái</TableHead>
+                                <TableHead>Hành Động</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -215,7 +215,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                             ) : todaysAppointments.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={6} className="text-center py-8 text-gray-500">
-                                        No appointments scheduled for today
+                                        Không có lịch hẹn ngày hôm nay
                                     </TableCell>
                                 </TableRow>
                             ) : (
@@ -250,7 +250,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                                                         className="text-[#007BFF] border-[#007BFF] hover:bg-blue-50"
                                                     >
                                                         <Eye className="h-4 w-4 mr-1" />
-                                                        View
+                                                        Xem
                                                     </Button>
                                                     {
                                                         appointment.status !== "Completed" && (
@@ -292,7 +292,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card className="border-0 shadow-md">
                     <CardHeader>
-                        <CardTitle className="text-lg">Recent Activity</CardTitle>
+                        <CardTitle className="text-lg">Hoạt động gần đây</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-3">
@@ -301,8 +301,8 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                                     <Users className="h-4 w-4 text-green-600" />
                                 </div>
                                 <div>
-                                    <p className="text-sm font-medium">Completed appointment</p>
-                                    <p className="text-xs text-gray-500">with John Smith</p>
+                                    <p className="text-sm font-medium">Đã hoàn thành lịch hẹn</p>
+                                    <p className="text-xs text-gray-500">với người dùng Nguyễn</p>
                                 </div>
                             </div>
                             <div className="flex items-center space-x-3">
@@ -310,8 +310,8 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                                     <TestTube className="h-4 w-4 text-blue-600" />
                                 </div>
                                 <div>
-                                    <p className="text-sm font-medium">Lab results received</p>
-                                    <p className="text-xs text-gray-500">for Emily Davis</p>
+                                    <p className="text-sm font-medium">Đã nhận kết quả xét nghiệm</p>
+                                    <p className="text-xs text-gray-500">với Bác Sĩ Nguyễn</p>
                                 </div>
                             </div>
                             <div className="flex items-center space-x-3">
@@ -319,8 +319,8 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                                     <CalendarDays className="h-4 w-4 text-purple-600" />
                                 </div>
                                 <div>
-                                    <p className="text-sm font-medium">Leave request approved</p>
-                                    <p className="text-xs text-gray-500">Dec 25-31, 2024</p>
+                                    <p className="text-sm font-medium">Đã chấp nhận yêu cầu nghỉ phép</p>
+                                    <p className="text-xs text-gray-500">Tháng 12, 2024 - Tháng 12, 2024</p>
                                 </div>
                             </div>
                         </div>
@@ -329,30 +329,30 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
 
                 <Card className="border-0 shadow-md">
                     <CardHeader>
-                        <CardTitle className="text-lg">Upcoming Tasks</CardTitle>
+                        <CardTitle className="text-lg">Các tác vụ sắp tới</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-3">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium">Review lab results</p>
-                                    <p className="text-xs text-gray-500">Due today</p>
+                                    <p className="text-sm font-medium">Kiểm tra kết quả xét nghiệm</p>
+                                    <p className="text-xs text-gray-500">Sẽ hết hôm nay</p>
                                 </div>
-                                <Badge className="bg-red-100 text-red-800">Urgent</Badge>
+                                <Badge className="bg-red-100 text-red-800">Ngắn</Badge>
                             </div>
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium">Complete patient records</p>
-                                    <p className="text-xs text-gray-500">Due tomorrow</p>
+                                    <p className="text-sm font-medium">Hoàn thành hồ sơ y tế</p>
+                                    <p className="text-xs text-gray-500">Sẽ hết ngày mai</p>
                                 </div>
-                                <Badge className="bg-yellow-100 text-yellow-800">Medium</Badge>
+                                <Badge className="bg-yellow-100 text-yellow-800">Trung bình</Badge>
                             </div>
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium">Certificate renewal</p>
-                                    <p className="text-xs text-gray-500">Due next week</p>
+                                    <p className="text-sm font-medium">Hủy chứng thư</p>
+                                    <p className="text-xs text-gray-500">Sẽ hết tuần sau</p>
                                 </div>
-                                <Badge className="bg-blue-100 text-blue-800">Low</Badge>
+                                <Badge className="bg-blue-100 text-blue-800">Thấp</Badge>
                             </div>
                         </div>
                     </CardContent>
@@ -360,7 +360,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
 
                 <Card className="border-0 shadow-md">
                     <CardHeader>
-                        <CardTitle className="text-lg">Quick Actions</CardTitle>
+                        <CardTitle className="text-lg">Hành động nhanh</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-3">
@@ -369,7 +369,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                                 onClick={() => onNavigate("schedule")}
                             >
                                 <Calendar className="h-4 w-4 mr-2" />
-                                View Schedule
+                                Xem kế hoạch
                             </Button>
                             <Button
                                 className="w-full justify-start"
@@ -377,7 +377,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                                 onClick={() => onNavigate("records")}
                             >
                                 <FileText className="h-4 w-4 mr-2" />
-                                Medical Records
+                                Hồ sơ Y Tế
                             </Button>
                             <Button
                                 className="w-full justify-start"
@@ -385,7 +385,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                                 onClick={() => onNavigate("leave")}
                             >
                                 <CalendarDays className="h-4 w-4 mr-2" />
-                                Request Leave
+                                Yêu cầu nghỉ phép
                             </Button>
                         </div>
                     </CardContent>

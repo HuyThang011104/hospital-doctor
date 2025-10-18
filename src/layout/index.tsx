@@ -23,13 +23,13 @@ interface LayoutProps {
 }
 
 const navigation = [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "appointments", label: "Appointments", icon: Calendar },
-    { id: "schedule", label: "Work Schedule", icon: Clock },
-    { id: "records", label: "Medical Records", icon: FileText },
-    { id: "prescriptions", label: "Prescriptions", icon: Pill },
-    { id: "leave", label: "Leave Requests", icon: CalendarDays },
-    { id: "certificates", label: "Certificates", icon: Award },
+    { id: "dashboard", label: "Trang chủ", icon: LayoutDashboard },
+    { id: "appointments", label: "Lịch hẹn", icon: Calendar },
+    { id: "schedule", label: "Lịch làm việc", icon: Clock },
+    { id: "records", label: "Hồ sơ Y Tế", icon: FileText },
+    { id: "prescriptions", label: "Đơn thuốc", icon: Pill },
+    { id: "leave", label: "Yêu cầu nghỉ phép", icon: CalendarDays },
+    { id: "certificates", label: "Chứng thư", icon: Award },
 ];
 
 export default function Layout({ children, currentPage, onNavigate, onLogout }: LayoutProps) {
@@ -46,8 +46,8 @@ export default function Layout({ children, currentPage, onNavigate, onLogout }: 
                                 <FileText className="h-6 w-6 text-[#007BFF]" />
                             </div>
                             <div>
-                                <h1 className="text-lg text-gray-900">Hospital Portal</h1>
-                                <p className="text-xs text-gray-500">Doctor Dashboard</p>
+                                <h1 className="text-lg text-gray-900">Vinmec Doctor </h1>
+                                <p className="text-xs text-gray-500">Cổng chăm sóc sức khỏe</p>
                             </div>
                         </div>
                     </div>
