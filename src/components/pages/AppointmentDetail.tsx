@@ -31,6 +31,7 @@ import {
   type MedicalRecord,
   type Medicine,
   type Prescription,
+  type Examination,
 } from "@/utils/mock/mock-data";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -65,6 +66,7 @@ export default function AppointmentDetailPage({
     Prescription[]
   >([]);
   const [recordLabTests, setRecordLabTests] = useState<LabTest[]>([]);
+  const [groupedLabTests, setGroupedLabTests] = useState<Record<number, { examination: Examination | undefined; tests: LabTest[] }>>({});
   const [labTests, setLabTests] = useState<LabTest[]>([]);
 
   // --- KHỐI FETCH DỮ LIỆU CỦA BẠN (GIỮ NGUYÊN) ---
@@ -150,19 +152,33 @@ export default function AppointmentDetailPage({
 
         if (examinationsError) throw examinationsError;
 
-        // Then fetch lab tests for those examinations
+        // Then fetch lab tests for those examinations with examination info
         const examinationIds = examinationsData?.map((e) => e.id) || [];
-        let labTestsData: LabTest[] = [];
+        let labTestsData: (LabTest & { examination?: Examination })[] = [];
 
         if (examinationIds.length > 0) {
           const { data: labTestsResult, error: labTestsError } = await supabase
             .from("lab_test")
-            .select("*")
-            .in("examination_id", examinationIds);
+            .select(`*, examination(*)`)
+            .in("examination_id", examinationIds)
+            .order("examination_id", { ascending: true });
 
           if (labTestsError) throw labTestsError;
           labTestsData = labTestsResult || [];
         }
+
+        // Group lab tests by examination
+        const groupedData = labTestsData.reduce((acc, test) => {
+          const examId = test.examination_id;
+          if (!acc[examId]) {
+            acc[examId] = {
+              examination: test.examination,
+              tests: []
+            };
+          }
+          acc[examId].tests.push(test);
+          return acc;
+        }, {} as Record<number, { examination: Examination | undefined; tests: LabTest[] }>);
 
         const [prescriptionsResult] = await Promise.all([
           supabase
@@ -175,6 +191,7 @@ export default function AppointmentDetailPage({
 
         setRecordPrescriptions(prescriptionsResult.data ?? []);
         setRecordLabTests(labTestsData);
+        setGroupedLabTests(groupedData);
       } catch (error) {
         console.error("Error fetching record details:", error);
         toast.error("Failed to load record details");
@@ -197,8 +214,9 @@ export default function AppointmentDetailPage({
 
   // Lab test state
   const [newLabTest, setNewLabTest] = useState({
-    lab_test_id: "",
+    selected_lab_tests: [] as string[],
     test_date: new Date().toISOString().split("T")[0],
+    examination_type: "",
   });
   const [showLabTestForm, setShowLabTestForm] = useState(false);
 
@@ -240,6 +258,16 @@ export default function AppointmentDetailPage({
       return;
     }
     try {
+      // First get the examination_id for this lab test
+      const { data: labTestData, error: fetchError } = await supabase
+        .from("lab_test")
+        .select("examination_id")
+        .eq("id", testId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Delete the lab test
       const { error } = await supabase
         .from("lab_test")
         .delete()
@@ -247,8 +275,34 @@ export default function AppointmentDetailPage({
 
       if (error) throw error;
 
+      // Check if this examination has any other lab tests
+      let shouldDeleteExamination = false;
+      if (labTestData?.examination_id) {
+        const { data: remainingTests, error: checkError } = await supabase
+          .from("lab_test")
+          .select("id")
+          .eq("examination_id", labTestData.examination_id);
+
+        if (checkError) throw checkError;
+
+        // If no more lab tests for this examination, delete the examination too
+        if (!remainingTests || remainingTests.length === 0) {
+          shouldDeleteExamination = true;
+          const { error: deleteExamError } = await supabase
+            .from("examination")
+            .delete()
+            .eq("id", labTestData.examination_id);
+
+          if (deleteExamError) throw deleteExamError;
+        }
+      }
+
       setRecordLabTests(recordLabTests.filter((t) => t.id !== testId));
-      toast.success("Xét nghiệm đã được xóa thành công");
+      toast.success(
+        shouldDeleteExamination
+          ? "Lab test and examination deleted successfully"
+          : "Lab test deleted successfully"
+      );
     } catch (error) {
       console.error("Lỗi xóa xét nghiệm:", error);
       toast.error("Failed to delete lab test. Vui lòng kiểm tra RLS!");
@@ -362,28 +416,61 @@ export default function AppointmentDetailPage({
   };
 
   const handleAddLabTest = async () => {
-    if (!newLabTest.lab_test_id) {
-      toast.error("Please select a test type");
+    if (newLabTest.selected_lab_tests.length === 0) {
+      toast.error("Please select at least one lab test");
       return;
     }
-    if (!recordId) {
-      toast.error("Please save medical record first");
+    if (!newLabTest.examination_type) {
+      toast.error("Please select examination type");
       return;
+    }
+
+    // Auto-create medical record if doesn't exist
+    let currentRecordId = recordId;
+    if (!currentRecordId) {
+      try {
+        const { data: newRecord, error: createError } = await supabase
+          .from("medical_record")
+          .insert([
+            {
+              appointment_id: appointment.id,
+              doctor_id: appointment.doctor_id,
+              patient_id: appointment.patient_id,
+              diagnosis: diagnosis || "Pending diagnosis",
+              treatment: treatment || "Pending treatment",
+            },
+          ])
+          .select()
+          .single();
+
+        if (createError) throw createError;
+        currentRecordId = newRecord.id;
+        setMedicalRecord(newRecord);
+        toast.info("Medical record created automatically");
+      } catch (error) {
+        console.error(error);
+        toast.error("Failed to create medical record");
+        return;
+      }
     }
 
     try {
       // First create an examination for this medical record
+      const selectedTestNames = newLabTest.selected_lab_tests
+        .map((testId) =>
+          labTests.find((t) => String(t.id) === testId)?.test_type
+        )
+        .filter(Boolean)
+        .join(", ");
+
       const { data: examinationData, error: examinationError } = await supabase
         .from("examination")
         .insert([
           {
-            medical_record_id: recordId,
-            examination_type: "Lab Test",
+            medical_record_id: currentRecordId,
+            examination_type: newLabTest.examination_type,
             examination_date: new Date().toISOString(),
-            details: `Lab test ordered: ${
-              labTests.find((t) => String(t.id) === newLabTest.lab_test_id)
-                ?.test_type
-            }`,
+            details: `Lab tests ordered: ${selectedTestNames}`,
           },
         ])
         .select()
@@ -391,35 +478,39 @@ export default function AppointmentDetailPage({
 
       if (examinationError) throw examinationError;
 
-      // Then create lab test linked to this examination
-      const selectedTest = labTests.find(
-        (t) => String(t.id) === newLabTest.lab_test_id
-      );
+      // Then create multiple lab tests linked to this examination
+      const labTestsToInsert = newLabTest.selected_lab_tests.map((testId) => {
+        const selectedTest = labTests.find(
+          (t) => String(t.id) === testId
+        );
+        return {
+          examination_id: examinationData.id,
+          test_type: selectedTest?.test_type || "",
+          test_date: newLabTest.test_date,
+          result: null,
+        };
+      });
 
       const { data, error } = await supabase
         .from("lab_test")
-        .insert([
-          {
-            examination_id: examinationData.id,
-            test_type: selectedTest?.test_type || "",
-            test_date: newLabTest.test_date,
-            result: null,
-          },
-        ])
+        .insert(labTestsToInsert)
         .select();
 
       if (error) throw error;
 
-      setRecordLabTests([...recordLabTests, ...data]);
+      setRecordLabTests([...recordLabTests, ...(data || [])]);
       setNewLabTest({
-        lab_test_id: "",
+        selected_lab_tests: [],
         test_date: new Date().toISOString().split("T")[0],
+        examination_type: "",
       });
       setShowLabTestForm(false);
-      toast.success("Lab test ordered successfully");
+      toast.success(
+        `${newLabTest.selected_lab_tests.length} lab test(s) ordered successfully`
+      );
     } catch (error) {
       console.error(error);
-      toast.error("Failed to add lab test");
+      toast.error("Failed to add lab tests");
     }
   };
 
@@ -433,9 +524,34 @@ export default function AppointmentDetailPage({
       toast.error("Please fill in all prescription fields");
       return;
     }
-    if (!recordId) {
-      toast.error("Please save medical record first");
-      return;
+
+    // Auto-create medical record if doesn't exist
+    let currentRecordId = recordId;
+    if (!currentRecordId) {
+      try {
+        const { data: newRecord, error: createError } = await supabase
+          .from("medical_record")
+          .insert([
+            {
+              appointment_id: appointment.id,
+              doctor_id: appointment.doctor_id,
+              patient_id: appointment.patient_id,
+              diagnosis: diagnosis || "Pending diagnosis",
+              treatment: treatment || "Pending treatment",
+            },
+          ])
+          .select()
+          .single();
+
+        if (createError) throw createError;
+        currentRecordId = newRecord.id;
+        setMedicalRecord(newRecord);
+        toast.info("Medical record created automatically");
+      } catch (error) {
+        console.error(error);
+        toast.error("Failed to create medical record");
+        return;
+      }
     }
 
     try {
@@ -443,7 +559,7 @@ export default function AppointmentDetailPage({
         .from("prescription")
         .insert([
           {
-            medical_record_id: recordId,
+            medical_record_id: currentRecordId,
             medicine_id: newPrescription.medicine_id,
             dosage: newPrescription.dosage,
             frequency: newPrescription.frequency,
@@ -617,7 +733,7 @@ export default function AppointmentDetailPage({
             <Button
               className="w-full bg-green-600 hover:bg-green-700"
               onClick={handleCompleteAppointment}
-              disabled={!isAppointmentEditable() || !recordId}
+              disabled={!isAppointmentEditable()}
             >
               <CheckCircle className="h-4 w-4 mr-2" />
               Complete Appointment
@@ -679,7 +795,6 @@ export default function AppointmentDetailPage({
               <Button
                 onClick={() => setShowLabTestForm(!showLabTestForm)}
                 className="bg-[#007BFF] hover:bg-blue-600"
-                disabled={!recordId} // Bắt buộc phải có recordId trước khi đặt xét nghiệm
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Order Test
@@ -693,26 +808,70 @@ export default function AppointmentDetailPage({
               <CardContent className="pt-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="lab_test">Test Type</Label>
-                    <Select
-                      value={newLabTest.lab_test_id}
-                      onValueChange={(value) =>
-                        setNewLabTest({ ...newLabTest, lab_test_id: value })
+                    <Label htmlFor="examination_type">Examination Type</Label>
+                    <Input
+                      id="examination_type"
+                      value={newLabTest.examination_type}
+                      onChange={(e) =>
+                        setNewLabTest({
+                          ...newLabTest,
+                          examination_type: e.target.value,
+                        })
                       }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select test type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {labTests.map((test) => (
-                          <SelectItem key={test.id} value={test.id.toString()}>
-                            {test.test_type}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder="e.g., Blood Test, Radiology, Physical Exam"
+                    />
                   </div>
 
+                  <div>
+                    <Label>Lab Tests</Label>
+                    <div className="mt-2 space-y-2 max-h-32 overflow-y-auto border rounded-md p-3">
+                      {labTests.map((test) => (
+                        <div key={test.id} className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id={`lab_test_${test.id}`}
+                            checked={newLabTest.selected_lab_tests.includes(
+                              test.id.toString()
+                            )}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setNewLabTest({
+                                  ...newLabTest,
+                                  selected_lab_tests: [
+                                    ...newLabTest.selected_lab_tests,
+                                    test.id.toString(),
+                                  ],
+                                });
+                              } else {
+                                setNewLabTest({
+                                  ...newLabTest,
+                                  selected_lab_tests:
+                                    newLabTest.selected_lab_tests.filter(
+                                      (id) => id !== test.id.toString()
+                                    ),
+                                });
+                              }
+                            }}
+                            className="rounded"
+                          />
+                          <label
+                            htmlFor={`lab_test_${test.id}`}
+                            className="text-sm cursor-pointer"
+                          >
+                            {test.test_type}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                    {newLabTest.selected_lab_tests.length === 0 && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Please select at least one lab test
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-4">
                   <div>
                     <Label htmlFor="test_date">Test Date</Label>
                     <Input
@@ -748,6 +907,7 @@ export default function AppointmentDetailPage({
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Examination</TableHead>
                 <TableHead>Test Type</TableHead>
                 <TableHead>Test Date</TableHead>
                 <TableHead>Result</TableHead>
@@ -755,29 +915,46 @@ export default function AppointmentDetailPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {recordLabTests.map((test) => (
-                <TableRow key={test.id}>
-                  <TableCell className="font-medium">
-                    {test.test_type}
-                  </TableCell>
-                  <TableCell>{test.test_date}</TableCell>
-                  <TableCell>{test.result}</TableCell>
-                  <TableCell>
-                    {isAppointmentEditable() && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDeleteLabTest(test.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+              {Object.entries(groupedLabTests).map(([, examData]) => (
+                examData.tests.map((test, index) => (
+                  <TableRow key={test.id}>
+                    {index === 0 && (
+                      <TableCell rowSpan={examData.tests.length} className="font-medium align-top">
+                        <div>
+                          <div className="font-semibold">{examData.examination?.examination_type}</div>
+                          <div className="text-xs text-gray-500">
+                            {new Date(examData.examination?.examination_date || '').toLocaleDateString()}
+                          </div>
+                          {examData.tests.length > 1 && (
+                            <div className="text-xs text-blue-600 mt-1">
+                              {examData.tests.length} tests
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
                     )}
-                  </TableCell>
-                </TableRow>
+                    <TableCell className="font-medium">
+                      {test.test_type}
+                    </TableCell>
+                    <TableCell>{test.test_date}</TableCell>
+                    <TableCell>{test.result || 'Pending'}</TableCell>
+                    <TableCell>
+                      {isAppointmentEditable() && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDeleteLabTest(test.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))
               ))}
               {recordLabTests.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-gray-500">
+                  <TableCell colSpan={5} className="text-center text-gray-500">
                     No lab tests ordered yet
                   </TableCell>
                 </TableRow>
@@ -801,7 +978,6 @@ export default function AppointmentDetailPage({
               <Button
                 onClick={() => setShowPrescriptionForm(!showPrescriptionForm)}
                 className="bg-[#007BFF] hover:bg-blue-600"
-                disabled={!recordId} // Bắt buộc phải có recordId trước khi thêm đơn thuốc
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Prescription
