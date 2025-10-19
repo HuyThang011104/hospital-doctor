@@ -32,6 +32,7 @@ import {
   type Medicine,
   type Prescription,
   type Examination,
+  type HardTest,
 } from "@/utils/mock/mock-data";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -67,7 +68,7 @@ export default function AppointmentDetailPage({
   >([]);
   const [recordLabTests, setRecordLabTests] = useState<LabTest[]>([]);
   const [groupedLabTests, setGroupedLabTests] = useState<Record<number, { examination: Examination | undefined; tests: LabTest[] }>>({});
-  const [labTests, setLabTests] = useState<LabTest[]>([]);
+  const [hardTests, setHardTests] = useState<HardTest[]>([]);
 
   // --- KHỐI FETCH DỮ LIỆU CỦA BẠN (GIỮ NGUYÊN) ---
 
@@ -113,15 +114,28 @@ export default function AppointmentDetailPage({
         const { data, error } = await supabase.from("lab_test").select(`*`);
         if (error) throw error;
         console.log("Lab tests: ", data);
-        if (data) {
-          setLabTests(data);
-        }
       } catch (error) {
         console.error("Error fetching lab tests:", error);
       }
     };
     fetchLabTests();
   }, [medicalRecord?.id]);
+
+  useEffect(() => {
+    const fetchHardTests = async () => {
+      try {
+        const { data, error } = await supabase.from("hard_test").select(`*`);
+        if (error) throw error;
+        console.log("Hard tests: ", data);
+        if (data) {
+          setHardTests(data);
+        }
+      } catch (error) {
+        console.error("Error fetching hard tests:", error);
+      }
+    };
+    fetchHardTests();
+  }, []);
 
   const recordId = useMemo(() => {
     if (!medicalRecord) return undefined;
@@ -458,7 +472,7 @@ export default function AppointmentDetailPage({
       // First create an examination for this medical record
       const selectedTestNames = newLabTest.selected_lab_tests
         .map((testId) =>
-          labTests.find((t) => String(t.id) === testId)?.test_type
+          hardTests.find((t) => String(t.id) === testId)?.name
         )
         .filter(Boolean)
         .join(", ");
@@ -478,16 +492,17 @@ export default function AppointmentDetailPage({
 
       if (examinationError) throw examinationError;
 
-      // Then create multiple lab tests linked to this examination
+      // Then create multiple lab tests linked to this examination with price from hard_test
       const labTestsToInsert = newLabTest.selected_lab_tests.map((testId) => {
-        const selectedTest = labTests.find(
+        const selectedHardTest = hardTests.find(
           (t) => String(t.id) === testId
         );
         return {
           examination_id: examinationData.id,
-          test_type: selectedTest?.test_type || "",
+          test_type: selectedHardTest?.name || "",
           test_date: newLabTest.test_date,
           result: null,
+          price: selectedHardTest?.price || 0,
         };
       });
 
@@ -825,41 +840,46 @@ export default function AppointmentDetailPage({
                   <div>
                     <Label>Lab Tests</Label>
                     <div className="mt-2 space-y-2 max-h-32 overflow-y-auto border rounded-md p-3">
-                      {labTests.map((test) => (
-                        <div key={test.id} className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            id={`lab_test_${test.id}`}
-                            checked={newLabTest.selected_lab_tests.includes(
-                              test.id.toString()
-                            )}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setNewLabTest({
-                                  ...newLabTest,
-                                  selected_lab_tests: [
-                                    ...newLabTest.selected_lab_tests,
-                                    test.id.toString(),
-                                  ],
-                                });
-                              } else {
-                                setNewLabTest({
-                                  ...newLabTest,
-                                  selected_lab_tests:
-                                    newLabTest.selected_lab_tests.filter(
-                                      (id) => id !== test.id.toString()
-                                    ),
-                                });
-                              }
-                            }}
-                            className="rounded"
-                          />
-                          <label
-                            htmlFor={`lab_test_${test.id}`}
-                            className="text-sm cursor-pointer"
-                          >
-                            {test.test_type}
-                          </label>
+                      {hardTests.map((test) => (
+                        <div key={test.id} className="flex items-center justify-between space-x-2">
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              id={`hard_test_${test.id}`}
+                              checked={newLabTest.selected_lab_tests.includes(
+                                test.id.toString()
+                              )}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setNewLabTest({
+                                    ...newLabTest,
+                                    selected_lab_tests: [
+                                      ...newLabTest.selected_lab_tests,
+                                      test.id.toString(),
+                                    ],
+                                  });
+                                } else {
+                                  setNewLabTest({
+                                    ...newLabTest,
+                                    selected_lab_tests:
+                                      newLabTest.selected_lab_tests.filter(
+                                        (id) => id !== test.id.toString()
+                                      ),
+                                  });
+                                }
+                              }}
+                              className="rounded"
+                            />
+                            <label
+                              htmlFor={`hard_test_${test.id}`}
+                              className="text-sm cursor-pointer"
+                            >
+                              {test.name}
+                            </label>
+                          </div>
+                          <span className="text-xs text-gray-600 font-medium">
+                            ${test.price}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -910,6 +930,7 @@ export default function AppointmentDetailPage({
                 <TableHead>Examination</TableHead>
                 <TableHead>Test Type</TableHead>
                 <TableHead>Test Date</TableHead>
+                <TableHead>Price</TableHead>
                 <TableHead>Result</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -937,6 +958,7 @@ export default function AppointmentDetailPage({
                       {test.test_type}
                     </TableCell>
                     <TableCell>{test.test_date}</TableCell>
+                    <TableCell>${test.price || 0}</TableCell>
                     <TableCell>{test.result || 'Pending'}</TableCell>
                     <TableCell>
                       {isAppointmentEditable() && (
@@ -954,7 +976,7 @@ export default function AppointmentDetailPage({
               ))}
               {recordLabTests.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-gray-500">
+                  <TableCell colSpan={6} className="text-center text-gray-500">
                     No lab tests ordered yet
                   </TableCell>
                 </TableRow>

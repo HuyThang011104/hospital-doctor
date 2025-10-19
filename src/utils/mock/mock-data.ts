@@ -115,6 +115,11 @@ export interface LabTest {
   price: number;
 }
 
+export interface HardTest {
+  id: number;
+  name: string;
+  price: number;
+}
 export interface LeaveRequest {
   id: number;
   doctor_id: number;
