@@ -82,6 +82,7 @@ export interface MedicalRecord {
   id: number;
   patient_id: number;
   doctor_id: number;
+  appointment_id?: number;
   diagnosis: string;
   treatment: string;
   record_date: string;
@@ -107,10 +108,11 @@ export interface Medicine {
 
 export interface LabTest {
   id: number;
-  medical_record_id: number;
+  examination_id: number;
   test_type: string;
   result: string;
   test_date: string;
+  price: number;
 }
 
 export interface LeaveRequest {
@@ -130,6 +132,14 @@ export interface Certificate {
   issued_by: string;
   issue_date: string;
   expiry_date: string;
+}
+
+export interface Examination {
+  id: number;
+  medical_record_id: number;
+  examination_type: string;
+  details: string | null;
+  examination_date: Date;
 }
 
 // Mock Data
@@ -334,6 +344,7 @@ export const medicalRecords: MedicalRecord[] = [
     id: 1,
     patient_id: 1,
     doctor_id: 1,
+    appointment_id: 3,
     diagnosis: "Hypertension",
     treatment: "ACE inhibitor medication, lifestyle modifications",
     record_date: "2024-12-19",
@@ -342,6 +353,7 @@ export const medicalRecords: MedicalRecord[] = [
     id: 2,
     patient_id: 2,
     doctor_id: 1,
+    appointment_id: 2,
     diagnosis: "Anxiety disorder",
     treatment: "Counseling sessions, stress management techniques",
     record_date: "2024-12-18",
@@ -350,6 +362,7 @@ export const medicalRecords: MedicalRecord[] = [
     id: 3,
     patient_id: 3,
     doctor_id: 1,
+    appointment_id: 3,
     diagnosis: "Chest pain - ruled out cardiac cause",
     treatment: "Pain management, follow-up in 2 weeks",
     record_date: "2024-12-17",
@@ -429,24 +442,27 @@ export const prescriptions: Prescription[] = [
 export const labTests: LabTest[] = [
   {
     id: 1,
-    medical_record_id: 1,
+    examination_id: 1,
     test_type: "Complete Blood Count",
     result: "Normal",
     test_date: "2024-12-19",
+    price: 10,
   },
   {
     id: 2,
-    medical_record_id: 1,
+    examination_id: 1,
     test_type: "Lipid Panel",
     result: "Elevated cholesterol",
     test_date: "2024-12-19",
+    price: 20,
   },
   {
     id: 3,
-    medical_record_id: 3,
+    examination_id: 3,
     test_type: "ECG",
     result: "Normal sinus rhythm",
     test_date: "2024-12-17",
+    price: 10,
   },
 ];
 
@@ -565,5 +581,5 @@ export const getLabTestsByRecordId = (
   recordId: number,
   labTests: LabTest[]
 ): LabTest[] => {
-  return labTests.filter((test) => test.medical_record_id === recordId);
+  return labTests.filter((test) => test.examination_id === recordId);
 };

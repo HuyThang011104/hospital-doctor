@@ -6,7 +6,6 @@ import AppointmentDetailPage from "./components/pages/AppointmentDetail";
 import AppointmentsPage from "./components/pages/Appointment";
 import WorkSchedulePage from "./components/pages/WorkSchedule";
 import MedicalRecordsPage from "./components/pages/MedicalRecord";
-import PrescriptionsPage from "./components/pages/Prescription";
 import LeaveRequestsPage from "./components/pages/LeaveRequests";
 import CertificatesPage from "./components/pages/Certificate";
 import LoginPage from "./components/pages/Login";
@@ -47,8 +46,6 @@ function AppContent() {
         return <WorkSchedulePage />;
       case "records":
         return <MedicalRecordsPage onNavigate={handleNavigate} />;
-      case "prescriptions":
-        return <PrescriptionsPage onNavigate={handleNavigate} />;
       case "leave":
         return <LeaveRequestsPage />;
       case "certificates":

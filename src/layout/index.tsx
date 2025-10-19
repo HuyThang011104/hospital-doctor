@@ -5,7 +5,6 @@ import {
     Calendar,
     Clock,
     FileText,
-    Pill,
     CalendarDays,
     Award,
     LogOut,
@@ -27,7 +26,6 @@ const navigation = [
     { id: "appointments", label: "Lịch hẹn", icon: Calendar },
     { id: "schedule", label: "Lịch làm việc", icon: Clock },
     { id: "records", label: "Hồ sơ Y Tế", icon: FileText },
-    { id: "prescriptions", label: "Đơn thuốc", icon: Pill },
     { id: "leave", label: "Yêu cầu nghỉ phép", icon: CalendarDays },
     { id: "certificates", label: "Chứng thư", icon: Award },
 ];
