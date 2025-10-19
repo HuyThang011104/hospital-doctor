@@ -37,7 +37,8 @@ function AppContent() {
         return (
           <AppointmentDetailPage
             appointment={pageData}
-            onBack={() => setCurrentPage("dashboard")}
+            // ĐÃ SỬA: Thay setCurrentPage("dashboard") bằng setCurrentPage("appointments")
+            onBack={() => setCurrentPage("appointments")}
           />
         );
       case "appointments":
