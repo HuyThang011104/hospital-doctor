@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { type Appointment, type LabTest, type MedicalRecord, type Medicine, type Prescription } from "@/utils/mock/mock-data";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, Calendar, CheckCircle, Plus, Save, Trash2, User } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCircle, Plus, Save, User } from "lucide-react";
 import { supabase } from "@/utils/backend/client";
 
 interface AppointmentDetailPageProps {
@@ -192,7 +192,6 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
                     .update({
                         diagnosis,
                         treatment,
-                        updated_at: new Date().toISOString(),
                     })
                     .eq("id", recordIdToUse);
 
@@ -207,7 +206,6 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
                         patient_id: appointment.patient_id,
                         diagnosis,
                         treatment,
-                        created_at: new Date().toISOString(),
                     }])
                     .select()
                     .single();
@@ -361,6 +359,11 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
         return statusColors[status as keyof typeof statusColors] || "bg-gray-100 text-gray-800";
     };
 
+    // Check if appointment can be edited (medical record, lab tests, prescriptions)
+    const isAppointmentEditable = () => {
+        return appointment.status === "Completed" || appointment.status === "Accepted";
+    };
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -463,6 +466,7 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
                                 onChange={(e) => setNotes(e.target.value)}
                                 placeholder="Appointment notes..."
                                 className="mt-1"
+                                disabled={!isAppointmentEditable()}
                             />
                         </div>
                     </CardContent>
@@ -477,6 +481,7 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
                         <Button
                             className="w-full bg-[#007BFF] hover:bg-blue-600"
                             onClick={handleSaveRecord}
+                            disabled={!isAppointmentEditable()}
                         >
                             <Save className="h-4 w-4 mr-2" />
                             Save Changes
@@ -484,47 +489,79 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
                         <Button
                             className="w-full bg-green-600 hover:bg-green-700"
                             onClick={handleCompleteAppointment}
+                            disabled={!isAppointmentEditable()}
                         >
                             <CheckCircle className="h-4 w-4 mr-2" />
                             Complete Appointment
                         </Button>
+                        {!isAppointmentEditable() && (
+                            <p className="text-xs text-gray-500 text-center">
+                                This appointment cannot be modified.
+                            </p>
+                        )}
                     </CardContent>
                 </Card>
             </div>
 
-            {/* Medical Record */}
-            <Card className="border-0 shadow-md">
-                <CardHeader>
-                    <CardTitle>Medical Record</CardTitle>
-                    <CardDescription>
-                        Diagnosis, treatment, and medical notes for this visit
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <Label htmlFor="diagnosis">Diagnosis</Label>
-                            <Textarea
-                                id="diagnosis"
-                                value={diagnosis}
-                                onChange={(e) => setDiagnosis(e.target.value)}
-                                placeholder="Enter diagnosis..."
-                                className="mt-1"
-                            />
+            {/* Medical Record - Only show if editable */}
+            {isAppointmentEditable() && (
+                <Card className="border-0 shadow-md">
+                    <CardHeader>
+                        <CardTitle>Medical Record</CardTitle>
+                        <CardDescription>
+                            Diagnosis, treatment, and medical notes for this visit
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <Label htmlFor="diagnosis">Diagnosis</Label>
+                                <Textarea
+                                    id="diagnosis"
+                                    value={diagnosis}
+                                    onChange={(e) => setDiagnosis(e.target.value)}
+                                    placeholder="Enter diagnosis..."
+                                    className="mt-1"
+                                />
+                            </div>
+                            <div>
+                                <Label htmlFor="treatment">Treatment</Label>
+                                <Textarea
+                                    id="treatment"
+                                    value={treatment}
+                                    onChange={(e) => setTreatment(e.target.value)}
+                                    placeholder="Enter treatment plan..."
+                                    className="mt-1"
+                                />
+                            </div>
                         </div>
-                        <div>
-                            <Label htmlFor="treatment">Treatment</Label>
-                            <Textarea
-                                id="treatment"
-                                value={treatment}
-                                onChange={(e) => setTreatment(e.target.value)}
-                                placeholder="Enter treatment plan..."
-                                className="mt-1"
-                            />
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Medical Record Display for non-editable appointments */}
+            {!isAppointmentEditable() && medicalRecord && (
+                <Card className="border-0 shadow-md">
+                    <CardHeader>
+                        <CardTitle>Medical Record</CardTitle>
+                        <CardDescription>
+                            Diagnosis and treatment for this visit (read-only)
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <Label className="text-sm text-gray-600">Diagnosis</Label>
+                                <p className="mt-1 p-3 bg-gray-50 rounded text-sm">{medicalRecord.diagnosis || 'No diagnosis recorded'}</p>
+                            </div>
+                            <div>
+                                <Label className="text-sm text-gray-600">Treatment</Label>
+                                <p className="mt-1 p-3 bg-gray-50 rounded text-sm">{medicalRecord.treatment || 'No treatment recorded'}</p>
+                            </div>
                         </div>
-                    </div>
-                </CardContent>
-            </Card>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Lab Tests */}
             <Card className="border-0 shadow-md">
@@ -534,17 +571,19 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
                             <CardTitle>Lab Tests</CardTitle>
                             <CardDescription>Ordered tests for this patient</CardDescription>
                         </div>
-                        <Button
-                            onClick={() => setShowLabTestForm(!showLabTestForm)}
-                            className="bg-[#007BFF] hover:bg-blue-600"
-                        >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Order Test
-                        </Button>
+                        {isAppointmentEditable() && (
+                            <Button
+                                onClick={() => setShowLabTestForm(!showLabTestForm)}
+                                className="bg-[#007BFF] hover:bg-blue-600"
+                            >
+                                <Plus className="h-4 w-4 mr-2" />
+                                Order Test
+                            </Button>
+                        )}
                     </div>
                 </CardHeader>
                 <CardContent>
-                    {showLabTestForm && (
+                    {isAppointmentEditable() && showLabTestForm && (
                         <Card className="mb-4 bg-blue-50 border-blue-200">
                             <CardContent className="pt-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -605,7 +644,6 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
                                 <TableHead>Test Type</TableHead>
                                 <TableHead>Test Date</TableHead>
                                 <TableHead>Result</TableHead>
-                                <TableHead>Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -614,11 +652,6 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
                                     <TableCell className="font-medium">{test.test_type}</TableCell>
                                     <TableCell>{test.test_date}</TableCell>
                                     <TableCell>{test.result}</TableCell>
-                                    <TableCell>
-                                        <Button variant="outline" size="sm">
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                    </TableCell>
                                 </TableRow>
                             ))}
                             {recordLabTests.length === 0 && (
@@ -641,17 +674,19 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
                             <CardTitle>Prescriptions</CardTitle>
                             <CardDescription>Medications prescribed for this patient</CardDescription>
                         </div>
-                        <Button
-                            onClick={() => setShowPrescriptionForm(!showPrescriptionForm)}
-                            className="bg-[#007BFF] hover:bg-blue-600"
-                        >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Add Prescription
-                        </Button>
+                        {isAppointmentEditable() && (
+                            <Button
+                                onClick={() => setShowPrescriptionForm(!showPrescriptionForm)}
+                                className="bg-[#007BFF] hover:bg-blue-600"
+                            >
+                                <Plus className="h-4 w-4 mr-2" />
+                                Add Prescription
+                            </Button>
+                        )}
                     </div>
                 </CardHeader>
                 <CardContent>
-                    {showPrescriptionForm && (
+                    {isAppointmentEditable() && showPrescriptionForm && (
                         <Card className="mb-4 bg-green-50 border-green-200">
                             <CardContent className="pt-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -724,7 +759,6 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
                                 <TableHead>Dosage</TableHead>
                                 <TableHead>Frequency</TableHead>
                                 <TableHead>Duration</TableHead>
-                                <TableHead>Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -738,11 +772,6 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
                                         <TableCell>{prescription.dosage}</TableCell>
                                         <TableCell>{prescription.frequency}</TableCell>
                                         <TableCell>{prescription.duration}</TableCell>
-                                        <TableCell>
-                                            <Button variant="outline" size="sm">
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        </TableCell>
                                     </TableRow>
                                 );
                             })}
