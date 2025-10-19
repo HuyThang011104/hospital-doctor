@@ -98,16 +98,36 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
 
         const fetchRecordDetails = async () => {
             try {
-                const [prescriptionsResult, labTestsResult] = await Promise.all([
-                    supabase.from("prescription").select(`*`).eq("medical_record_id", recordId),
-                    supabase.from("lab_test").select(`*`).eq("medical_record_id", recordId)
+                // Fetch examinations for this medical record first
+                const { data: examinationsData, error: examinationsError } = await supabase
+                    .from("examination")
+                    .select("*")
+                    .eq("medical_record_id", recordId);
+
+                if (examinationsError) throw examinationsError;
+
+                // Then fetch lab tests for those examinations
+                const examinationIds = examinationsData?.map(e => e.id) || [];
+                let labTestsData: LabTest[] = [];
+
+                if (examinationIds.length > 0) {
+                    const { data: labTestsResult, error: labTestsError } = await supabase
+                        .from("lab_test")
+                        .select("*")
+                        .in("examination_id", examinationIds);
+
+                    if (labTestsError) throw labTestsError;
+                    labTestsData = labTestsResult || [];
+                }
+
+                const [prescriptionsResult] = await Promise.all([
+                    supabase.from("prescription").select(`*`).eq("medical_record_id", recordId)
                 ]);
 
                 if (prescriptionsResult.error) throw prescriptionsResult.error;
-                if (labTestsResult.error) throw labTestsResult.error;
 
                 setRecordPrescriptions(prescriptionsResult.data ?? []);
-                setRecordLabTests(labTestsResult.data ?? []);
+                setRecordLabTests(labTestsData);
             } catch (error) {
                 console.error("Error fetching record details:", error);
                 toast.error("Failed to load record details");
@@ -247,6 +267,21 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
         }
 
         try {
+            // First create an examination for this medical record
+            const { data: examinationData, error: examinationError } = await supabase
+                .from("examination")
+                .insert([{
+                    medical_record_id: recordId,
+                    examination_type: "Lab Test",
+                    examination_date: new Date().toISOString(),
+                    details: `Lab test ordered: ${labTests.find(t => String(t.id) === newLabTest.lab_test_id)?.test_type}`,
+                }])
+                .select()
+                .single();
+
+            if (examinationError) throw examinationError;
+
+            // Then create lab test linked to this examination
             const selectedTest = labTests.find(
                 (t) => String(t.id) === newLabTest.lab_test_id
             );
@@ -255,7 +290,7 @@ export default function AppointmentDetailPage({ appointment, onBack }: Appointme
                 .from("lab_test")
                 .insert([
                     {
-                        medical_record_id: recordId,
+                        examination_id: examinationData.id,
                         test_type: selectedTest?.test_type || "",
                         test_date: newLabTest.test_date,
                         result: null,
