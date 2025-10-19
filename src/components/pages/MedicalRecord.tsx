@@ -53,6 +53,7 @@ export default function MedicalRecordPage({ onNavigate }: PrescriptionsPageProps
     const [medicalRecords, setMedicalRecords] = useState<MedicalRecord[]>([]);
     const [examinations, setExaminations] = useState<Examination[]>([]);
     const [labTests, setLabTests] = useState<LabTest[]>([]);
+    const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -141,13 +142,32 @@ export default function MedicalRecordPage({ onNavigate }: PrescriptionsPageProps
         return labTests.filter(l => l.examination_id === examinationId);
     };
 
-    const filteredPrescriptions = prescriptionsData.filter(prescription => {
-        const matchesSearch =
-            prescription.patient?.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            prescription.medicine?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            prescription.dosage.toLowerCase().includes(searchTerm.toLowerCase());
+    // Group medical records by patient
+    const getMedicalRecordsByPatientId = (patientId: number): MedicalRecord[] => {
+        return medicalRecords.filter(mr => mr.patient_id === patientId);
+    };
 
-        // For now, we'll treat all prescriptions as "Active" - in a real system you'd have status
+    const getPrescriptionsByPatientId = (patientId: number): EnrichedPrescription[] => {
+        const patientRecords = getMedicalRecordsByPatientId(patientId);
+        const recordIds = patientRecords.map(mr => mr.id);
+        return prescriptionsData.filter(p => recordIds.includes(p.medical_record_id));
+    };
+
+    const getExaminationsByPatientId = (patientId: number): Examination[] => {
+        const patientRecords = getMedicalRecordsByPatientId(patientId);
+        const recordIds = patientRecords.map(mr => mr.id);
+        return examinations.filter(e => recordIds.includes(e.medical_record_id));
+    };
+
+    // Filter patients that have medical records
+    const patientsWithRecords = patients.filter(patient => 
+        medicalRecords.some(mr => mr.patient_id === patient.id)
+    );
+
+    const filteredPatients = patientsWithRecords.filter(patient => {
+        const matchesSearch =
+            patient.full_name.toLowerCase().includes(searchTerm.toLowerCase());
+
         const matchesStatus = statusFilter === "all" || statusFilter === "active";
 
         return matchesSearch && matchesStatus;
@@ -421,7 +441,7 @@ export default function MedicalRecordPage({ onNavigate }: PrescriptionsPageProps
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                             <Input
-                                placeholder="Search by patient, medicine, or dosage..."
+                                placeholder="Search by patient name..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="pl-10"
@@ -432,7 +452,7 @@ export default function MedicalRecordPage({ onNavigate }: PrescriptionsPageProps
                                 <SelectValue placeholder="Filter by status" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="all">All Prescriptions</SelectItem>
+                                <SelectItem value="all">All Patients</SelectItem>
                                 <SelectItem value="active">Active</SelectItem>
                                 <SelectItem value="completed">Completed</SelectItem>
                                 <SelectItem value="discontinued">Discontinued</SelectItem>
@@ -442,31 +462,112 @@ export default function MedicalRecordPage({ onNavigate }: PrescriptionsPageProps
                 </CardContent>
             </Card>
 
-            {/* Medical Records & Related Data */}
+            {/* Patients List */}
             <Card className="border-0 shadow-md">
                 <CardHeader>
-                    <CardTitle>Medical Records & Treatments</CardTitle>
+                    <CardTitle>Patients</CardTitle>
                     <CardDescription>
-                        Complete medical records with examinations and prescriptions
+                        Click on a patient to view their medical records and treatments
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <Tabs defaultValue="medical-records" className="w-full">
-                        <TabsList className="grid w-full grid-cols-1">
-                            <TabsTrigger value="medical-records">
-                                Medical Records ({medicalRecords.length})
-                            </TabsTrigger>
-                        </TabsList>
+                    {filteredPatients.length === 0 ? (
+                        <div className="text-center text-gray-500 py-8">
+                            No patients found
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {filteredPatients.map((patient) => {
+                                const patientRecords = getMedicalRecordsByPatientId(patient.id);
+                                const patientPrescriptions = getPrescriptionsByPatientId(patient.id);
+                                const patientExaminations = getExaminationsByPatientId(patient.id);
 
-                        <TabsContent value="medical-records">
-                            {medicalRecords.length === 0 ? (
-                                <div className="text-center text-gray-500 py-8">
-                                    No medical records found
-                                </div>
-                            ) : (
+                                return (
+                                    <Card 
+                                        key={patient.id} 
+                                        className={`border border-gray-200 cursor-pointer transition-all hover:shadow-md ${
+                                            selectedPatientId === patient.id ? 'ring-2 ring-[#007BFF]' : ''
+                                        }`}
+                                        onClick={() => setSelectedPatientId(selectedPatientId === patient.id ? null : patient.id)}
+                                    >
+                                        <CardContent className="p-4">
+                                            <div className="flex items-center space-x-3 mb-3">
+                                                <div className="p-2 bg-blue-100 rounded-full">
+                                                    <User className="h-4 w-4 text-blue-600" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <h4 className="font-medium text-lg">{patient.full_name}</h4>
+                                                    <p className="text-sm text-gray-500">ID: {patient.id}</p>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-sm text-gray-600">Medical Records:</span>
+                                                    <Badge variant="outline" className="text-blue-600">
+                                                        {patientRecords.length}
+                                                    </Badge>
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-sm text-gray-600">Prescriptions:</span>
+                                                    <Badge variant="outline" className="text-purple-600">
+                                                        {patientPrescriptions.length}
+                                                    </Badge>
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-sm text-gray-600">Examinations:</span>
+                                                    <Badge variant="outline" className="text-orange-600">
+                                                        {patientExaminations.length}
+                                                    </Badge>
+                                                </div>
+                                            </div>
+
+                                            {selectedPatientId === patient.id && (
+                                                <div className="mt-3 pt-3 border-t border-gray-200">
+                                                    <p className="text-xs text-center text-gray-500">
+                                                        Click to collapse medical details
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                );
+                            })}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* Selected Patient Medical Records */}
+            {selectedPatientId && (
+                <Card className="border-0 shadow-md">
+                    <CardHeader>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <CardTitle>Medical Records & Treatments</CardTitle>
+                                <CardDescription>
+                                    Complete medical records for {getPatientById(selectedPatientId)?.full_name}
+                                </CardDescription>
+                            </div>
+                            <Button 
+                                variant="outline" 
+                                onClick={() => setSelectedPatientId(null)}
+                            >
+                                Close
+                            </Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        <Tabs defaultValue="medical-records" className="w-full">
+                            <TabsList className="grid w-full grid-cols-1">
+                                <TabsTrigger value="medical-records">
+                                    Medical Records ({getMedicalRecordsByPatientId(selectedPatientId).length})
+                                </TabsTrigger>
+                            </TabsList>
+
+                            <TabsContent value="medical-records">
                                 <div className="space-y-6">
-                                    {medicalRecords.map((medicalRecord) => {
-                                        const patient = getPatientById(medicalRecord.patient_id);
+                                    {getMedicalRecordsByPatientId(selectedPatientId).map((medicalRecord) => {
                                         const recordPrescriptions = getPrescriptionsByRecordId(medicalRecord.id);
                                         const recordExaminations = getExaminationsByRecordId(medicalRecord.id);
 
@@ -483,7 +584,7 @@ export default function MedicalRecordPage({ onNavigate }: PrescriptionsPageProps
                                                                 <div>
                                                                     <h4 className="font-medium text-lg">Medical Record</h4>
                                                                     <p className="text-sm text-gray-500">
-                                                                        {new Date(medicalRecord.record_date).toLocaleDateString()} • {patient?.full_name || "Unknown Patient"}
+                                                                        {new Date(medicalRecord.record_date).toLocaleDateString()}
                                                                     </p>
                                                                 </div>
                                                             </div>
@@ -617,11 +718,11 @@ export default function MedicalRecordPage({ onNavigate }: PrescriptionsPageProps
                                         );
                                     })}
                                 </div>
-                            )}
-                        </TabsContent>
-                    </Tabs>
-                </CardContent>
-            </Card>
+                            </TabsContent>
+                        </Tabs>
+                    </CardContent>
+                </Card>
+            )}
         </div>
     );
 }
